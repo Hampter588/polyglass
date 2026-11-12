@@ -115,6 +115,16 @@ public final class BackendCatalog {
         return lastAvailable;
     }
 
+    /** Short human-readable name for an id, used by the menus. */
+    public static String displayName(String id) {
+        return switch (BackendPlan.normalize(id)) {
+            case DX12 -> "Direct3D 12";
+            case VULKAN -> "Vulkan";
+            case OPENGL -> "OpenGL";
+            default -> "Auto";
+        };
+    }
+
     /** Maps a live backend instance to the id used in {@code polyglass.json}. */
     public static String idOf(GpuBackend backend) {
         if (backend.getClass().getName().equals(DX12_CLASS)) {

@@ -3,7 +3,9 @@
   "package": "dev.polyglass.mixin",
   "compatibilityLevel": "JAVA_25",
   "client": [
-    "PreferredGraphicsApiMixin"
+    "OptionsSubScreenAccessor",
+    "PreferredGraphicsApiMixin",
+    "VideoSettingsScreenMixin"
   ],
   "injectors": {
     "defaultRequire": 1

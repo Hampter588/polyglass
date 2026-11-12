@@ -19,8 +19,19 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  *
  * <p>Ordering is merged rather than replaced — see
  * {@link BackendCatalog#order(GpuBackend[])}.</p>
+ *
+ * <p><b>Priority 500.</b> DirectXMod injects at the same {@code RETURN} with
+ * the default priority (1000) and <em>replaces</em> the array outright. Mixins
+ * with a lower priority are applied first, and the first {@code RETURN} handler
+ * to call {@code setReturnValue} wins: Mixin guards every subsequent handler
+ * with an {@code isCancelled()} check, so once the return value is set the
+ * remaining handlers never run. Applying first therefore guarantees Polyglass
+ * decides the order. Without it DirectXMod won the race and the config was
+ * silently ignored — that was observed in a real client log. Our merge still
+ * adds DirectXMod's {@code dx12} instance (by reflection), it just places it
+ * where the config says.</p>
  */
-@Mixin(PreferredGraphicsApi.class)
+@Mixin(value = PreferredGraphicsApi.class, priority = 500)
 public abstract class PreferredGraphicsApiMixin {
 
     @Inject(method = "getBackendsToTry", at = @At("RETURN"), cancellable = true)

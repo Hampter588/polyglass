@@ -93,12 +93,29 @@ stable across both versions — only the imported types change.
 
 ## Competing mixins
 
-DirectXMod injects at the same `RETURN` with `cancellable = true`. Two injectors
-that both call `setReturnValue` would fight, and the last one applied would win.
-`BackendCatalog` avoids that by **merging**: it reads the array it is given,
-reuses the instances already in it, adds the ones it can construct, and only
-then reorders. Unknown backends from other mods are preserved at the end. The
-result converges regardless of application order.
+DirectXMod injects at the same `RETURN` with `cancellable = true` and
+**replaces** the array with a hard-coded `{dx12, gl, vulkan}`. Two injectors that
+both call `setReturnValue` fight, and the one applied last wins.
+
+Two things stop that from mattering:
+
+1. `@Mixin(..., priority = 500)` on our handler. Lower priority is applied
+   earlier, and the first `RETURN` handler to call `setReturnValue` wins —
+   Mixin guards every later handler with an `isCancelled()` check, so the rest
+   never run. Applying first therefore makes Polyglass the decider. Both mods
+   sit at the default 1000 without the explicit value, and DirectXMod was
+   observed winning that race: Polyglass's log line never appeared and the
+   configured order was ignored.
+2. `BackendCatalog` **merges**: it reads the array it is given, reuses the
+   instances already in it, adds the ones it can construct (including
+   DirectXMod's `Dx12Backend`, by reflection), and only then reorders. Unknown
+   backends from other mods are preserved at the end.
+
+Because of (1) DirectXMod's handler is the one that gets skipped, but nothing is
+lost: its backend class is still on the classpath, so `dx12` is constructed and
+offered exactly as if its mixin had run.
+
+
 
 ## Selection policy
 

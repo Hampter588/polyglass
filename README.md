@@ -48,7 +48,13 @@ toggle.
 
 ## In-game menu
 
-**F9** (rebindable under Controls → Polyglass) opens the picker:
+Two ways in:
+
+- **Options → Video Settings → `Graphics API: … — Polyglass…`**, a row appended
+  to the vanilla screen. Done returns to Video Settings.
+- **F9** (rebindable under Controls → Polyglass) from anywhere in game.
+
+Both open the same picker:
 
 ```
 Polyglass — graphics backend
@@ -103,8 +109,18 @@ Polyglass replaces it as the place you actually change this:
   `vulkan` → `vulkan, dx12, opengl`; `opengl` → `opengl, vulkan, dx12`.
 - An explicit `backend` in `polyglass.json` always wins over the dropdown.
 
-The vanilla row is still visible in Video Settings; it is a mirror, not a second
-switch.
+The vanilla row is still visible and stays a mirror, not a second switch.
+Polyglass adds its own row at the end of Video Settings instead of removing
+vanilla's: replacing an `OptionsList` entry is far more fragile than appending
+one, and nothing can drift while the two are written through.
+
+DirectXMod replaces `VideoSettingsScreen` wholesale with its own
+`Dx12VideoSettingsScreen`, which overrides `init()` without calling `super`.
+That screen has no `OptionsList`, so the Polyglass row is not injected there —
+F9 still works. In exchange, DirectXMod greys their Graphics API row out and
+shows the backend the session actually created, so the two do not contradict
+each other.
+
 
 ## Requirements
 
@@ -137,7 +153,9 @@ src/main/java/dev/polyglass/
   backend/BackendCatalog.java     builds the GpuBackend[] from config
   config/PolyglassConfig.java     polyglass.json
   menu/PolyglassScreen.java       backend picker
-  mixin/PreferredGraphicsApiMixin.java   the entire integration
+  mixin/PreferredGraphicsApiMixin.java   reorders the backend array (priority 500)
+  mixin/VideoSettingsScreenMixin.java    adds the Polyglass row to Video Settings
+  mixin/OptionsSubScreenAccessor.java    accessor for the protected OptionsList
 ```
 
 ## What is not included

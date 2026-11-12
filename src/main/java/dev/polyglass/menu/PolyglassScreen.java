@@ -37,8 +37,27 @@ public final class PolyglassScreen extends Screen {
     /** Set as soon as the config differs from what this session booted with. */
     private boolean dirty;
 
+    /** Where Done goes. {@code null} means "back to the game". */
+    private final Screen lastScreen;
+
     public PolyglassScreen() {
+        this(null);
+    }
+
+    /**
+     * @param lastScreen the screen that opened this one, so Video Settings
+     *                   returns to itself instead of closing the menu
+     */
+    public PolyglassScreen(Screen lastScreen) {
         super(Component.literal("Polyglass"));
+        this.lastScreen = lastScreen;
+    }
+
+    @Override
+    public void onClose() {
+        if (this.minecraft != null) {
+            this.minecraft.gui.setScreen(this.lastScreen);
+        }
     }
 
     @Override
