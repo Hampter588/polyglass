@@ -1,6 +1,6 @@
 package dev.polyglass.mixin;
 
-import com.mojang.renderpearl.api.device.GpuBackend;
+import com.mojang.blaze3d.systems.GpuBackend;
 import dev.polyglass.backend.BackendCatalog;
 import net.minecraft.client.PreferredGraphicsApi;
 import org.spongepowered.asm.mixin.Mixin;

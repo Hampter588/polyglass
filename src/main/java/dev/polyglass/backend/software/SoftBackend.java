@@ -1,12 +1,14 @@
 package dev.polyglass.backend.software;
 
-import com.mojang.renderpearl.api.device.BackendCreationException;
-import com.mojang.renderpearl.api.device.GpuBackend;
-import com.mojang.renderpearl.api.device.GpuDebugOptions;
-import com.mojang.renderpearl.api.device.GpuDevice;
+import com.mojang.blaze3d.GLFWErrorCapture;
+import com.mojang.blaze3d.shaders.GpuDebugOptions;
+import com.mojang.blaze3d.shaders.ShaderSource;
+import com.mojang.blaze3d.systems.BackendCreationException;
+import com.mojang.blaze3d.systems.GpuBackend;
+import com.mojang.blaze3d.systems.GpuDevice;
 
 /**
- * CPU rasteriser backend. No GPU, no driver, no platform window API.
+ * CPU rasteriser backend. No GPU, no driver, no window API.
  *
  * <p>Status: the raster core ({@link SoftRaster}) is implemented and tested,
  * but {@link #createDevice} still refuses. That is deliberate — it makes the
@@ -25,26 +27,26 @@ public final class SoftBackend implements GpuBackend {
         return NAME;
     }
 
-    /** Nothing to load: the backend is pure Java plus the JDK's own buffers. */
-    @Override
-    public void loadLibrary() throws BackendCreationException {
-    }
-
-    @Override
-    public void unloadLibrary() {
-    }
-
     /**
-     * No native window. Returns 0, which the game only turns into an input
-     * handle once {@link #createDevice} has succeeded — and it never does yet.
+     * No window hints: the software backend does not ask GLFW for a context.
+     * The window is still created by the game for input and is simply never
+     * presented to.
      */
     @Override
-    public long createWindow(String title, int width, int height, long shareWith) {
-        return 0L;
+    public void setWindowHints() {
     }
 
     @Override
-    public GpuDevice createDevice(GpuDebugOptions options) throws BackendCreationException {
+    public void handleWindowCreationErrors(GLFWErrorCapture.Error error) throws BackendCreationException {
+        throw new BackendCreationException(
+                "polyglass: software backend does not create a window context",
+                BackendCreationException.Reason.GLFW_ERROR);
+    }
+
+    @Override
+    public GpuDevice createDevice(long window, ShaderSource defaultShaderSource,
+                                  GpuDebugOptions debugOptions, Runnable criticalShaderLoader)
+            throws BackendCreationException {
         throw new BackendCreationException(
                 "polyglass: software backend is not complete yet (raster core ready, GpuDevice binding is milestone S2)",
                 BackendCreationException.Reason.OTHER);

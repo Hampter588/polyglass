@@ -1,8 +1,8 @@
 package dev.polyglass.backend;
 
-import com.mojang.renderpearl.api.device.GpuBackend;
-import com.mojang.renderpearl.backend.opengl.GlBackend;
-import com.mojang.renderpearl.backend.vulkan.VulkanBackend;
+import com.mojang.blaze3d.opengl.GlBackend;
+import com.mojang.blaze3d.systems.GpuBackend;
+import com.mojang.blaze3d.vulkan.VulkanBackend;
 import dev.polyglass.Probe;
 import dev.polyglass.backend.software.SoftBackend;
 import dev.polyglass.config.PolyglassConfig;

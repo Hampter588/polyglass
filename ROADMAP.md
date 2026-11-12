@@ -6,8 +6,8 @@ fallback is the only renderer Polyglass owns.
 
 ## M0 — Thin selector ✅
 
-- [x] Gradle + Fabric for 26.3 / Java 25
-- [x] Verified the seam against the 26.3 jar: `PreferredGraphicsApi#getBackendsToTry()`
+- [x] Gradle + Fabric for 26.2 / Java 25
+- [x] Verified the seam against the 26.2 jar: `PreferredGraphicsApi#getBackendsToTry()`
 - [x] Single mixin that reorders the candidate array and merges other mods' entries
 - [x] `BackendPlan` ordering policy, pure Java, 8 unit tests
 - [x] `polyglass.json` (backend, order, software toggle, debug)
@@ -44,16 +44,19 @@ This is the decision that makes or breaks the tier, and it is per-OS native work
 If S3 turns out to cost more than it returns, stop at S2: the raster core is
 still useful for CI screenshots and golden-image tests.
 
-## D1 — Direct3D 12
+## D1 — Direct3D 12 ✅ (via 26.2 pin)
 
-Blocked upstream, not on Polyglass: DirectXMod is on Minecraft 26.2 and the
-26.2 → 26.3 GPU API change (`com.mojang.blaze3d.systems.GpuBackend` →
-`com.mojang.renderpearl.api.device.GpuBackend`, plus backend-owned window
-creation) is source-breaking.
+- [x] Pin Polyglass to Minecraft 26.2, the version DirectXMod targets
+- [x] Verify against the 26.2 jar: `com.mojang.blaze3d.systems.GpuBackend`,
+      `getBackendsToTry()`, `BackendCreationException.Reason`
+- [ ] Run with DirectXMod installed and confirm `dx12` is offered and selected
+- [ ] Play-test: title screen, world load, resize, screenshot
 
-- [ ] Track DirectXMod for a 26.3 branch
-- [ ] When it lands: verify `BackendCatalog` picks it up with no code change
-- [ ] Alternative: pin Polyglass to 26.2, where it works today
+When DirectXMod ports to 26.3, the move is: swap the four imports to
+`com.mojang.renderpearl.*`, replace `SoftBackend`'s four methods with
+`loadLibrary`/`unloadLibrary`/`createWindow`/`createDevice`, and bump
+`gradle.properties` + `fabric.mod.json`. `BackendPlan`, the mixin and the menu
+need no changes.
 
 ## X1 — Optional integration probe
 

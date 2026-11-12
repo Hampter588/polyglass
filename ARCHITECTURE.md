@@ -1,23 +1,26 @@
 # Architecture
 
-## The seam (verified against the 26.3 jar)
+## The seam (verified against the 26.2 jar)
 
-Minecraft 26.3 chooses its graphics backend through one method:
+Minecraft chooses its graphics backend through one method:
 
 ```java
-// net.minecraft.client.PreferredGraphicsApi
+// net.minecraft.client.PreferredGraphicsApi  (enum: DEFAULT, OPENGL, VULKAN)
 public GpuBackend[] getBackendsToTry();
 ```
 
-`PreferredGraphicsApi` is an enum: `DEFAULT`, `OPENGL`, `VULKAN`. The game calls
-`getBackendsToTry()` once during boot, then walks the array:
+The boot loop walks that array and tries each candidate:
 
 ```
 for (GpuBackend backend : preferred.getBackendsToTry()) {
-    backend.loadLibrary();
-    long window = backend.createWindow(title, width, height, shareWith);
-    GpuDevice device = backend.createDevice(debugOptions);   // throws BackendCreationException
-    // success -> keep it; failure -> unloadLibrary(), next candidate
+    backend.setWindowHints();                       // inside GLFW's error scope
+    // window is created by the game with those hints
+    try {
+        GpuDevice device = backend.createDevice(window, shaderSource, debugOptions, criticalShaderLoader);
+        // success -> keep it
+    } catch (BackendCreationException e) {
+        // failure -> next candidate
+    }
 }
 ```
 
@@ -27,7 +30,7 @@ shader compiler, or a window.
 
 ```
 ┌──────────────────────────────────────────────────────────┐
-│ Minecraft 26.3                                           │
+│ Minecraft 26.2                                           │
 │  PreferredGraphicsApi.getBackendsToTry()                 │
 └───────────────────┬──────────────────────────────────────┘
                     │ mixin, @At("RETURN")
@@ -41,56 +44,52 @@ shader compiler, or a window.
 │ GlBackend      │ │ VulkanBackend      │ │ SoftBackend      │
 │ (vanilla)      │ │ (vanilla)          │ │ (Polyglass)      │
 └────────────────┘ └────────────────────┘ └──────────────────┘
-      plus, if the user installed it: com.xgdt.dx12.dx12.Dx12Backend
+      plus, if installed: com.xgdt.dx12.dx12.Dx12Backend
 ```
 
-## 26.3 moved the GPU API
-
-In 26.2 the interface lived at `com.mojang.blaze3d.systems.GpuBackend`. In 26.3
-it moved to a separate library inside the game jar:
-
-```
-com.mojang.renderpearl.api.device.GpuBackend
-com.mojang.renderpearl.api.device.GpuDevice
-com.mojang.renderpearl.api.device.BackendCreationException   (checked)
-com.mojang.renderpearl.backend.opengl.GlBackend
-com.mojang.renderpearl.backend.vulkan.VulkanBackend
-```
-
-The interface also changed shape:
+The 26.2 `GpuBackend` contract:
 
 ```java
 public interface GpuBackend {
     String getName();
-    void loadLibrary() throws BackendCreationException;
-    void unloadLibrary();
-    long createWindow(String title, int width, int height, long shareWith);
-    GpuDevice createDevice(GpuDebugOptions options) throws BackendCreationException;
+    void setWindowHints();
+    void handleWindowCreationErrors(GLFWErrorCapture.Error error) throws BackendCreationException;
+    GpuDevice createDevice(long window, ShaderSource defaultShaderSource,
+                           GpuDebugOptions debugOptions, Runnable criticalShaderLoader)
+            throws BackendCreationException;
 }
 ```
 
-The backend now owns window creation. The 26.2 methods
-`setWindowHints()` / `handleWindowCreationErrors(...)` / `createDevice(long window, …)`
-are gone.
+## Why 26.2 and not 26.3
 
-**Consequence:** DirectXMod, which targets 26.2, cannot run on 26.3 — its
-`Dx12Backend` implements an interface that no longer exists, and its mixin
-returns an array of a type that no longer exists. The `dx12` id is therefore
-inert until that mod is ported (or Polyglass pins to 26.2).
+26.3 moved the GPU API into a separate library and changed the contract:
 
-## Shaders
+| | 26.2 (target) | 26.3 |
+|---|---|---|
+| Package | `com.mojang.blaze3d.systems` | `com.mojang.renderpearl.api.device` |
+| Window | created by the game | **created by the backend** (`createWindow(String,int,int,long)`) |
+| Hooks | `setWindowHints`, `handleWindowCreationErrors` | removed |
+| Device | `createDevice(long, ShaderSource, GpuDebugOptions, Runnable)` | `createDevice(GpuDebugOptions)` |
 
-`GpuDevice.compilePipeline(RenderPipeline, ShaderSource, Executor)` is async and
-returns `CompletableFuture<CompiledRenderPipeline.Pending>`. `ShaderSource`
-hands out GLSL text via `getShader(Identifier, ShaderType)`. The frontend
-(`com.mojang.renderpearl.frontend.shaders.GlslCompiler`, `SPIRVModule`,
-`PipelineBuilder`) does GLSL → SPIR-V, and backends consume SPIR-V
-(`com.mojang.renderpearl.backend.api.SpvModule`).
+DirectXMod — the only real D3D12 backend in the ecosystem — targets 26.2. Its
+`Dx12Backend` implements the 26.2 interface, so on 26.3 the class cannot even
+load. Pinning to 26.2 buys a working DX12 today; the selector itself is
+version-agnostic, and moving to 26.3 later is an import sweep plus a different
+`SoftBackend` signature.
 
-This is the reason a software backend is not a weekend job: it has to either
-reuse the SPIR-V front half and interpret/execute SPIR-V, or run the GLSL path
-and interpret that. Either way it needs to understand every pipeline the game
-compiles.
+## 26.3, for the record
+
+In 26.3 the interface and implementations live at:
+
+```
+com.mojang.renderpearl.api.device.GpuBackend
+com.mojang.renderpearl.api.device.GpuDevice
+com.mojang.renderpearl.backend.opengl.GlBackend
+com.mojang.renderpearl.backend.vulkan.VulkanBackend
+```
+
+`PreferredGraphicsApi.getBackendsToTry()` still exists, so the mixin target is
+stable across both versions — only the imported types change.
 
 ## Competing mixins
 
@@ -120,15 +119,25 @@ Two independent problems:
 1. **Rasterisation.** `SoftRaster` is done: ARGB colour buffer, float depth
    buffer, clipped filled triangles, tested headlessly.
 2. **Presentation.** Not designed yet, and it is the part that decides whether
-   this is useful. A CPU framebuffer still has to reach a window. Options are a
-   platform-native blit (Win32 `StretchDIBits`, X11 SHM, Cocoa `CALayer`) with
-   its own window and input plumbing, or borrowing a GL context purely as a
-   blit target. The first is real native work per OS; the second reuses the
-   driver you were trying to avoid.
+   this is useful. In 26.2 the game creates the window and the device exposes
+   `createSurface(windowHandle)`; a CPU framebuffer still has to reach that
+   window. Options are a platform-native blit (Win32 `StretchDIBits`, X11 SHM,
+   Cocoa `CALayer`) using hints from `setWindowHints()`, or borrowing a GL
+   context purely as a blit target. The first is real native work per OS; the
+   second reuses the driver you were trying to avoid.
 
 Until both exist, `SoftBackend.createDevice` throws `BackendCreationException`
 on purpose, so the boot loop treats it as unavailable and falls through. That
 is safer than a device that binds and then crashes on the first draw.
+
+## Shaders
+
+`ShaderSource.getShader(Identifier, ShaderType)` hands out GLSL text. The GL
+backend compiles it directly; the Vulkan backend compiles to SPIR-V and its
+pipelines consume SPIR-V modules. A software backend reading `ShaderSource`
+therefore sees GLSL, which has to be interpreted (or compiled to SPIR-V first
+and then interpreted). Either way it needs to understand every pipeline the
+game compiles — start with `core/screenquad` and `position_tex_color`.
 
 ## Non-goals
 

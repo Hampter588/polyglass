@@ -8,6 +8,7 @@ import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.resources.Identifier;
+import org.lwjgl.glfw.GLFW;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -36,8 +37,8 @@ public final class Polyglass implements ClientModInitializer {
 
         menuKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
                 "key.polyglass.menu",
-                InputConstants.Type.KEYBOARD,
-                InputConstants.KEY_F9,
+                InputConstants.Type.KEYSYM,
+                GLFW.GLFW_KEY_F9,
                 KeyMapping.Category.register(Identifier.fromNamespaceAndPath(MOD_ID, "main"))));
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {

@@ -1,7 +1,12 @@
 # Polyglass
 
-A graphics backend selector for Minecraft 26.x: pick Vulkan, OpenGL, Direct3D 12
+A graphics backend selector for Minecraft 26.2: pick Vulkan, OpenGL, Direct3D 12
 or a CPU rasteriser from one menu, with an automatic fallback chain.
+
+Pinned to **26.2** on purpose: DirectXMod, the only working D3D12 backend,
+targets it. 26.3 moved the GPU API from `com.mojang.blaze3d.systems` to
+`com.mojang.renderpearl.api` and made the backend own window creation, which is
+source-breaking for that mod. See [ARCHITECTURE.md](ARCHITECTURE.md).
 
 **poly** (many backends) + **glass** (what you look at the game through).
 
@@ -23,7 +28,7 @@ game already has all of that.
 |---|---|---|
 | `vulkan` | vanilla `VulkanBackend` | First choice on Windows and Linux |
 | `opengl` | vanilla `GlBackend` | Always available; the safety net |
-| `dx12` | [DirectXMod](https://github.com/366862732/DirectXmod) | Windows only; requires that mod installed. Apache-2.0, not bundled |
+| `dx12` | [DirectXMod](https://github.com/366862732/DirectXmod) | Windows only, 26.2 only; requires that mod installed. Apache-2.0, not bundled |
 | `software` | Polyglass | CPU rasteriser. **Incomplete** — see below |
 
 `auto` (the default) means "walk the configured order and take the first backend
@@ -86,7 +91,7 @@ menu.
 .\gradlew build
 ```
 
-Targets Minecraft **26.3**, Fabric Loader 0.19.5, Java 25. Versions live in
+Targets Minecraft **26.2**, Fabric Loader 0.19.5, Java 25. Versions live in
 `gradle.properties`. Minecraft 26.1+ is unobfuscated, so there is no `mappings`
 dependency and the Loom plugin id is `net.fabricmc.fabric-loom`.
 
