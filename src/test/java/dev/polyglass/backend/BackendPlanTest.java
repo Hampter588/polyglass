@@ -10,13 +10,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /** Pure ordering policy: no Minecraft, no GPU, no I/O. */
 class BackendPlanTest {
 
-    private static final List<String> AVAILABLE = List.of("vulkan", "dx12", "opengl", "software");
+    private static final List<String> AVAILABLE = List.of("vulkan", "dx12", "opengl");
 
     @Test
     void autoFollowsConfiguredOrder() {
         List<String> plan = BackendPlan.resolve("auto", List.of("vulkan", "dx12", "opengl"), AVAILABLE);
 
-        assertEquals(List.of("vulkan", "dx12", "opengl", "software"), plan);
+        assertEquals(List.of("vulkan", "dx12", "opengl"), plan);
     }
 
     @Test
@@ -52,7 +52,7 @@ class BackendPlanTest {
     void availableButUnlistedBackendIsStillTriedLast() {
         List<String> plan = BackendPlan.resolve("auto", List.of("opengl"), AVAILABLE);
 
-        assertEquals(List.of("opengl", "vulkan", "dx12", "software"), plan);
+        assertEquals(List.of("opengl", "vulkan", "dx12"), plan);
     }
 
     @Test
@@ -64,6 +64,6 @@ class BackendPlanTest {
     void idsAreNormalised() {
         List<String> plan = BackendPlan.resolve("  VULKAN ", List.of(" OpenGL "), AVAILABLE);
 
-        assertEquals(List.of("vulkan", "opengl", "dx12", "software"), plan);
+        assertEquals(List.of("vulkan", "opengl", "dx12"), plan);
     }
 }

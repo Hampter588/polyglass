@@ -3,7 +3,7 @@
   "id": "polyglass",
   "version": "${version}",
   "name": "Polyglass",
-  "description": "Graphics backend selector for Minecraft 26.2: pick Vulkan, OpenGL, Direct3D 12 (via DirectXMod) or the experimental CPU rasteriser, with an automatic fallback chain.",
+  "description": "Graphics backend selector for Minecraft 26.2: pick Vulkan, OpenGL or Direct3D 12 (via DirectXMod) from one menu, with an automatic fallback chain.",
   "authors": [
     "Hampter588"
   ],

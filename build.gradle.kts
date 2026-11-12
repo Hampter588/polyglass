@@ -33,8 +33,7 @@ dependencies {
     implementation("net.fabricmc:fabric-loader:$loaderVersion")
     implementation("net.fabricmc.fabric-api:fabric-api:$fabricApiVersion")
 
-    // BackendPlan and SoftRaster have no Minecraft imports, so they are
-    // testable on a bare JVM.
+    // BackendPlan has no Minecraft imports, so it is testable on a bare JVM.
     testImplementation(platform("org.junit:junit-bom:5.11.4"))
     testImplementation("org.junit.jupiter:junit-jupiter")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")

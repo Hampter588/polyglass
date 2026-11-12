@@ -33,9 +33,6 @@ public final class PolyglassConfig {
     /** Preference order for {@code auto}. Null means "use the platform default". */
     private List<String> order;
 
-    /** Opt in to the CPU rasteriser. It is a raster core, not a display driver. */
-    private boolean enableSoftware = false;
-
     /** Extra logging of the resolved plan and the running backend. */
     private boolean debug = false;
 
@@ -98,21 +95,12 @@ public final class PolyglassConfig {
         return normalised;
     }
 
-    public boolean softwareEnabled() {
-        return enableSoftware;
-    }
-
     public boolean debug() {
         return debug;
     }
 
     public void setBackend(String id) {
         this.backend = id == null || id.isBlank() ? BackendPlan.AUTO : id;
-        save();
-    }
-
-    public void setSoftwareEnabled(boolean enabled) {
-        this.enableSoftware = enabled;
         save();
     }
 
@@ -125,7 +113,6 @@ public final class PolyglassConfig {
     public void reset() {
         this.backend = BackendPlan.AUTO;
         this.order = null;
-        this.enableSoftware = false;
         save();
     }
 
@@ -148,8 +135,8 @@ public final class PolyglassConfig {
      */
     public static List<String> defaultOrder() {
         if (Probe.isWindows()) {
-            return List.of("vulkan", "dx12", "opengl", "software");
+            return List.of("vulkan", "dx12", "opengl");
         }
-        return List.of("vulkan", "opengl", "software");
+        return List.of("vulkan", "opengl");
     }
 }

@@ -1,7 +1,7 @@
 # Polyglass
 
-A graphics backend selector for Minecraft 26.2: pick Vulkan, OpenGL, Direct3D 12
-or a CPU rasteriser from one menu, with an automatic fallback chain.
+A graphics backend selector for Minecraft 26.2: pick Vulkan, OpenGL or Direct3D
+12 from one menu, with an automatic fallback chain.
 
 Pinned to **26.2** on purpose: DirectXMod, the only working D3D12 backend,
 targets it. 26.3 moved the GPU API from `com.mojang.blaze3d.systems` to
@@ -29,40 +29,14 @@ game already has all of that.
 | `vulkan` | vanilla `VulkanBackend` | First choice on Windows and Linux |
 | `opengl` | vanilla `GlBackend` | Always available; the safety net |
 | `dx12` | [DirectXMod](https://github.com/366862732/DirectXmod) | Windows only, 26.2 only; requires that mod installed. Apache-2.0, not bundled |
-| `software` | Polyglass | CPU rasteriser. **Incomplete** — see below |
 
 `auto` (the default) means "walk the configured order and take the first backend
 that can create a device". A backend that refuses is skipped, not fatal.
 
 DirectXMod is an optional, soft dependency: `fabric.mod.json` declares it under
 `recommends`, so installing it is never required and never blocks the game from
-launching.
-
-## In-game menu
-
-**F9** (rebindable under Controls → Polyglass) opens the picker:
-
-```
-Polyglass — graphics backend
-This session: OpenGL 4.6
-Order: vulkan → dx12 → opengl → software
-
-▶ Auto — follow order
-   Vulkan (vanilla)
-   Direct3D 12 (DirectXMod) — not installed
-   OpenGL (vanilla)
-   Software (CPU raster) — off
-
-[Software: OFF] [Get DirectXMod] [CPU raster test]
-Restart the game to apply.
-[Reset]                              [Done]
-```
-
-- The first line reports the device the game actually created, which is the only
-  reliable answer to "did my choice take effect?".
-- `Get DirectXMod` opens the upstream repository behind a confirmation screen.
-- `CPU raster test` renders a 320×240 scene with the CPU rasteriser and writes
-  `config/polyglass-selftest.png`. It needs no GPU and no driver.
+launching. When it is absent, the `dx12` entry simply never appears in the
+candidate list.
 
 ### No live switching
 
@@ -72,34 +46,29 @@ no teardown-and-recreate path in the game. The menu therefore writes the config
 and asks for a restart — the same model as every game with a DirectX/Vulkan
 toggle.
 
-### Software backend status
+## In-game menu
 
-The CPU core works: ARGB colour buffer, float depth buffer, clipped filled
-triangles, and 12 headless tests. `SoftFrameDump` renders a complete 320×240
-scene — sky gradient, ground, three depth-tested triangles, one clipped against
-the frame edge — and the picker can write it to a PNG. No GPU, no driver, no
-Minecraft classes.
+**F9** (rebindable under Controls → Polyglass) opens the picker:
 
-What does **not** exist is the `GpuDevice` binding: textures, buffers, samplers,
-render passes and pipeline compilation all have to be implemented before the
-frontend will accept a device. So `SoftBackend.createDevice` throws
-`BackendCreationException` on purpose. That keeps the entry safe to enable: the
-boot loop treats it as "unavailable" and falls through to Vulkan/OpenGL instead
-of booting into a half-bound device.
+```
+Polyglass — graphics backend
+This session: OpenGL 4.6
+Order: vulkan → dx12 → opengl
 
-It is off by default (`enableSoftware`). Turn it on to have the fallback in the
-candidate list, not to get game frames.
+▶ Auto — follow order
+   Vulkan (vanilla)
+   Direct3D 12 (DirectXMod) — not installed
+   OpenGL (vanilla)
 
-### About VulkanMod and MetalRender
+[Get DirectXMod (optional)]
+Changes apply on the next launch.
+[Reset]                              [Done]
+```
 
-Not integrated, deliberately:
-
-- **VulkanMod** targets Minecraft 1.21.11 and predates the 26.x backend SPI. It
-  replaces `LevelRenderer` itself, so it cannot plug into `PreferredGraphicsApi`
-  at all. On 26.x its job is done by the game's own `VulkanBackend`.
-- **MetalRender** is macOS/Apple-Silicon only, ships binaries without source in
-  the repository, and its licence requires prior written permission to
-  redistribute — including bundling. It cannot be wrapped or shipped.
+- `This session:` reports the device the game actually created, which is the
+  only reliable answer to "did my choice take effect?".
+- `Get DirectXMod` opens the upstream repository behind a confirmation screen.
+- `Reset` restores `auto` and the platform default order.
 
 ## Configuration
 
@@ -108,18 +77,14 @@ Not integrated, deliberately:
 ```json
 {
   "backend": "auto",
-  "order": ["vulkan", "dx12", "opengl", "software"],
-  "enableSoftware": false,
+  "order": ["vulkan", "dx12", "opengl"],
   "debug": false
 }
 ```
 
 Selection: explicit `backend` first (if usable), then `order`, then anything
 still available. Unknown or unavailable ids are dropped silently; `debug: true`
-logs the resolved plan.
-
-In game, **F9** opens the picker (see [In-game menu](#in-game-menu)). It is
-also rebindable under Controls → Polyglass.
+logs the resolved plan and the running backend.
 
 ## Building
 
@@ -139,17 +104,25 @@ Minecraft classes.
 
 ```
 src/main/java/dev/polyglass/
-  Polyglass.java                  entrypoint: config log + F9 picker
+  Polyglass.java                  entrypoint: boot log + F9 picker
   Probe.java                      OS / classpath probes
   backend/BackendPlan.java        ordering policy (pure, unit tested)
   backend/BackendCatalog.java     builds the GpuBackend[] from config
-  backend/software/SoftBackend.java   CPU backend (device binding pending)
-  backend/software/SoftRaster.java    framebuffer + triangle rasteriser
-  backend/software/SoftFrameDump.java complete offscreen scene -> PNG
   config/PolyglassConfig.java     polyglass.json
   menu/PolyglassScreen.java       backend picker
   mixin/PreferredGraphicsApiMixin.java   the entire integration
 ```
 
-Read [ARCHITECTURE.md](ARCHITECTURE.md) for why it is built this way, and
-[ROADMAP.md](ROADMAP.md) for what is left.
+## What is not included
+
+- **No software/CPU renderer.** A CPU backend is not a menu entry, it is a
+  renderer: 26.2 requires a full `GpuDeviceBackend`, a command encoder and
+  render passes, a pipeline compiler, and per-OS window blitting. That is a
+  separate project, so it is out of scope rather than shipped half-working.
+- **No live API switching.** The array is consumed once, before the window
+  exists; no teardown path exists.
+- **No Metal.** MetalRender ships no source and its licence forbids bundling.
+- **No VulkanMod.** It targets 1.21.11 and replaces `LevelRenderer` itself; it
+  does not implement the `GpuBackend` seam.
+
+Read [ARCHITECTURE.md](ARCHITECTURE.md) for why it is built this way.

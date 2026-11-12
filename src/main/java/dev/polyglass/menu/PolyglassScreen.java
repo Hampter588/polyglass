@@ -3,7 +3,6 @@ package dev.polyglass.menu;
 import dev.polyglass.Probe;
 import dev.polyglass.backend.BackendCatalog;
 import dev.polyglass.backend.BackendPlan;
-import dev.polyglass.backend.software.SoftFrameDump;
 import dev.polyglass.config.PolyglassConfig;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.StringWidget;
@@ -11,7 +10,6 @@ import net.minecraft.client.gui.screens.ConfirmLinkScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -45,7 +43,7 @@ public final class PolyglassScreen extends Screen {
     protected void init() {
         super.init();
 
-        int top = Math.max(8, (this.height - 216) / 2);
+        int top = Math.max(8, (this.height - 196) / 2);
         int left = this.width / 2 - ROW_WIDTH / 2;
 
         addLine("Polyglass — graphics backend", left, top);
@@ -60,23 +58,10 @@ public final class PolyglassScreen extends Screen {
             y += ROW_PITCH;
         }
 
-        int small = 88;
-        int gap = 8;
         int rowY = y + 4;
-        addRenderableWidget(Button.builder(softwareLabel(), button -> {
-            PolyglassConfig config = PolyglassConfig.get();
-            config.setSoftwareEnabled(!config.softwareEnabled());
-            dirty = true;
-            rebuild();
-        }).bounds(left, rowY, small, ROW_HEIGHT).build());
-
         addRenderableWidget(Button.builder(dx12Label(),
                         ConfirmLinkScreen.confirmLink(this, DX12_URL))
-                .bounds(left + small + gap, rowY, small, ROW_HEIGHT)
-                .build());
-
-        addRenderableWidget(Button.builder(Component.literal("CPU raster test"), button -> selfTest())
-                .bounds(left + (small + gap) * 2, rowY, small, ROW_HEIGHT)
+                .bounds(left, rowY, ROW_WIDTH, ROW_HEIGHT)
                 .build());
 
         addLine(noteText(), left, rowY + 26);
@@ -109,9 +94,8 @@ public final class PolyglassScreen extends Screen {
     }
 
     private List<Choice> choices() {
-        PolyglassConfig config = PolyglassConfig.get();
-        String selected = BackendPlan.normalize(config.backend());
-        List<Choice> choices = new ArrayList<>(5);
+        String selected = BackendPlan.normalize(PolyglassConfig.get().backend());
+        List<Choice> choices = new ArrayList<>(4);
 
         choices.add(new Choice(BackendPlan.AUTO,
                 marker(selected, BackendPlan.AUTO) + "Auto — follow order"));
@@ -124,10 +108,6 @@ public final class PolyglassScreen extends Screen {
                         ? "" : " — " + (Probe.isWindows() ? "not installed" : "Windows only"))));
         choices.add(new Choice(BackendCatalog.OPENGL,
                 marker(selected, BackendCatalog.OPENGL) + "OpenGL (vanilla)"));
-        choices.add(new Choice(BackendCatalog.SOFTWARE,
-                marker(selected, BackendCatalog.SOFTWARE)
-                        + "Software (CPU raster)"
-                        + (config.softwareEnabled() ? " — experimental" : " — off")));
         return choices;
     }
 
@@ -145,12 +125,10 @@ public final class PolyglassScreen extends Screen {
         rebuild();
     }
 
-    private Component softwareLabel() {
-        return Component.literal("Software: " + (PolyglassConfig.get().softwareEnabled() ? "ON" : "OFF"));
-    }
-
     private Component dx12Label() {
-        return Component.literal(BackendCatalog.directXModInstalled() ? "DirectXMod: installed" : "Get DirectXMod");
+        return Component.literal(BackendCatalog.directXModInstalled()
+                ? "DirectXMod: installed"
+                : "Get DirectXMod (optional)");
     }
 
     private String noteText() {
@@ -158,16 +136,5 @@ public final class PolyglassScreen extends Screen {
             return statusLine;
         }
         return dirty ? "Restart the game to apply." : "Changes apply on the next launch.";
-    }
-
-    private void selfTest() {
-        Path dir = PolyglassConfig.path().getParent();
-        try {
-            Path out = SoftFrameDump.write(dir, 320, 240);
-            statusLine = "Wrote " + out.getFileName();
-        } catch (Exception e) {
-            statusLine = "Raster test failed: " + e.getMessage();
-        }
-        rebuild();
     }
 }

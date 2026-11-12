@@ -1,8 +1,8 @@
 # Roadmap
 
 Polyglass is a selector, not a renderer. Vulkan and OpenGL come from the game;
-DX12 comes from DirectXMod when that mod runs on the targeted version; the CPU
-fallback is the only renderer Polyglass owns.
+DX12 comes from DirectXMod when it is installed on 26.2. Polyglass owns no
+rendering code of its own.
 
 ## M0 — Thin selector ✅
 
@@ -10,67 +10,51 @@ fallback is the only renderer Polyglass owns.
 - [x] Verified the seam against the 26.2 jar: `PreferredGraphicsApi#getBackendsToTry()`
 - [x] Single mixin that reorders the candidate array and merges other mods' entries
 - [x] `BackendPlan` ordering policy, pure Java, 8 unit tests
-- [x] `polyglass.json` (backend, order, software toggle, debug)
-- [x] F9 picker screen with restart notice
+- [x] `polyglass.json` (backend, order, debug)
 - [x] Graceful degradation for unavailable backends
 
-## S1 — CPU raster core ✅
+## M1 — Menu and diagnostics ✅
 
-- [x] ARGB colour buffer + float depth buffer
-- [x] Clipped, flat-shaded triangle fill with depth test
-- [x] Headless tests (coverage, ordering, clipping, degenerate)
+- [x] F9 picker with restart notice
+- [x] Per-backend state (`not installed`, `Windows only`) and a `▶` selection marker
+- [x] "This session" line from `RenderSystem.getBackendDescription()`
+- [x] `Get DirectXMod` button (confirmation screen, no bundling)
+- [x] `Reset` to platform defaults
+- [x] Boot log: platform, config, available ids, resolved plan, running backend
+- [x] Keybind translation file + mod icon
 
-## S2 — Software backend: device binding
-
-- [ ] `SoftDevice`: buffers, textures, samplers, texture views backed by
-      `SoftRaster` and plain arrays (`GpuDeviceBackend` is 16 methods)
-- [ ] `CommandEncoder` → `SoftRaster` (clear, draw, viewport/scissor)
-- [ ] `compilePipeline`: consume the frontend's SPIR-V and run a minimal
-      vertex/fragment interpreter, starting with `core/screenquad` and
-      `position_tex_color`
-- [x] Offscreen acceptance: a complete frame is rendered and asserted headless
-      (`SoftFrameDumpTest`), and dumped as a PNG from the picker
-- [x] Keep `createDevice` throwing until the offscreen frame is correct
-
-## S3 — Software backend: presentation
-
-This is the decision that makes or breaks the tier, and it is per-OS native work.
-
-- [ ] Choose the blit path: Win32 `StretchDIBits`, X11 SHM, or Cocoa `CALayer`
-- [ ] Own the window (the 26.3 `GpuBackend.createWindow` contract now allows it)
-- [ ] Wire input so the game still receives keyboard/mouse
-- [ ] Acceptance: title screen and a flat world at 320×240 on a machine with no
-      working Vulkan *and* no working OpenGL driver
-
-If S3 turns out to cost more than it returns, stop at S2: the raster core is
-still useful for CI screenshots and golden-image tests.
-
-## D1 — Direct3D 12 ✅ (via 26.2 pin)
+## D1 — Direct3D 12 via the 26.2 pin
 
 - [x] Pin Polyglass to Minecraft 26.2, the version DirectXMod targets
 - [x] Verify against the 26.2 jar: `com.mojang.blaze3d.systems.GpuBackend`,
       `getBackendsToTry()`, `BackendCreationException.Reason`
+- [x] Declare DirectXMod (`gl4dx12`) as `recommends`, looked up by reflection
 - [ ] Run with DirectXMod installed and confirm `dx12` is offered and selected
 - [ ] Play-test: title screen, world load, resize, screenshot
 
-When DirectXMod ports to 26.3, the move is: swap the four imports to
-`com.mojang.renderpearl.*`, replace `SoftBackend`'s four methods with
-`loadLibrary`/`unloadLibrary`/`createWindow`/`createDevice`, and bump
-`gradle.properties` + `fabric.mod.json`. `BackendPlan`, the mixin and the menu
-need no changes.
+## V1 — Runtime verification (the remaining gate)
 
-## X1 — Diagnostics ✅
+Everything below is compile-time proof so far; none of it has been seen running.
 
-- [x] Show, in the picker, which backends exist and whether DirectXMod is
-      installed
-- [x] Report the device the game actually created (`RenderSystem`
-      backend description), so a fallback is visible instead of silent
-- [x] Log block at boot: platform, config, available ids, resolved plan, running
-      backend
-- [ ] Warn when another mod owns the same mixin injection point
+- [ ] `.\gradlew runClient` starts and the mixin applies (no mixin error in the log)
+- [ ] `[polyglass] backend order: [vulkan, dx12, opengl]` appears
+- [ ] `[polyglass] running on: …` reports a real device
+- [ ] Title screen renders; picking OpenGL and restarting changes that line
+
+## Later
+
+- **26.3 port.** When DirectXMod moves, swap the imports in `BackendCatalog`
+  and the mixin to `com.mojang.renderpearl.*`, adapt `GpuBackend`'s window
+  methods, and bump `gradle.properties` + `fabric.mod.json`. `BackendPlan` and
+  the menu need no changes.
+- **Competing-mixin warning.** DirectXMod injects at the same `RETURN`; the
+  merge already copes, but a log line naming the other mod would help.
 
 ## Explicitly out of scope
 
+- **A software/CPU renderer.** A CPU backend is a renderer: `GpuDeviceBackend`,
+  command encoder, render passes, a pipeline compiler, and per-OS window
+  blitting. Separate project; not shipped half-working here.
 - **Live API switching.** The array is consumed once, before the window exists,
   and a `GpuDevice` owns everything created after it. No teardown path exists.
 - **Metal (MetalRender).** No source in its repository, macOS/Apple Silicon

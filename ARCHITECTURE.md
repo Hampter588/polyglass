@@ -40,10 +40,10 @@ shader compiler, or a window.
 │  BackendCatalog  GpuBackend[] assembly + merge           │
 └───────────────────┬──────────────────────────────────────┘
         ┌───────────┴────────────┬─────────────────┐
-┌───────▼────────┐ ┌─────────────▼──────┐ ┌────────▼─────────┐
-│ GlBackend      │ │ VulkanBackend      │ │ SoftBackend      │
-│ (vanilla)      │ │ (vanilla)          │ │ (Polyglass)      │
-└────────────────┘ └────────────────────┘ └──────────────────┘
+┌───────▼────────┐ ┌─────────────▼──────┐
+│ GlBackend      │ │ VulkanBackend      │
+│ (vanilla)      │ │ (vanilla)          │
+└────────────────┘ └────────────────────┘
       plus, if installed: com.xgdt.dx12.dx12.Dx12Backend
 ```
 
@@ -74,8 +74,8 @@ public interface GpuBackend {
 DirectXMod — the only real D3D12 backend in the ecosystem — targets 26.2. Its
 `Dx12Backend` implements the 26.2 interface, so on 26.3 the class cannot even
 load. Pinning to 26.2 buys a working DX12 today; the selector itself is
-version-agnostic, and moving to 26.3 later is an import sweep plus a different
-`SoftBackend` signature.
+version-agnostic, and moving to 26.3 later is an import sweep in
+`BackendCatalog` and the mixin.
 
 ## 26.3, for the record
 
@@ -112,32 +112,19 @@ tested:
 Unavailable ids are dropped, never fatal. If the plan comes out empty, the
 original vanilla array is returned untouched.
 
-## Software backend
+## No software backend
 
-Three independent problems:
+A CPU backend is not a menu entry — it is a renderer. On 26.2 it would need a
+`GpuDeviceBackend` (16 methods: surfaces, command encoders, samplers, textures,
+texture views, buffers, pipeline compilation, queries, `DeviceInfo`),
+`CommandEncoderBackend`, `RenderPassBackend`, a GLSL/SPIR-V interpreter for every
+pipeline the game compiles, and a per-OS blit into the window
+(`StretchDIBits` / X11 SHM / `CALayer`) with input forwarding.
 
-1. **Rasterisation.** Done. `SoftRaster` is an ARGB colour buffer, a float depth
-   buffer, and clipped filled triangles. `SoftFrameDump` composes a complete
-   320×240 scene (sky gradient, ground, three depth-tested triangles, one clipped
-   at the frame edge) and writes it as a PNG. Both are tested headlessly.
-2. **Device binding.** In 26.2 a backend returns a `GpuDevice` built from a
-   `GpuDeviceBackend` (16 methods: surfaces, command encoders, samplers,
-   textures, texture views, buffers, pipelines, queries, `DeviceInfo`). Plus
-   `CommandEncoderBackend` and `RenderPassBackend`. Until those exist the
-   frontend cannot accept the device, so this is the real milestone, not a
-   formality.
-3. **Presentation.** Not designed yet, and it is the part that decides whether
-   this is useful. In 26.2 the game creates the window and the device exposes
-   `createSurface(windowHandle)`; a CPU framebuffer still has to reach that
-   window. Options are a platform-native blit (Win32 `StretchDIBits`, X11 SHM,
-   Cocoa `CALayer`) using hints from `setWindowHints()`, or borrowing a GL
-   context purely as a blit target. The first is real native work per OS; the
-   second reuses the driver you were trying to avoid.
-
-Until (2) and (3) exist, `SoftBackend.createDevice` throws
-`BackendCreationException` on purpose, so the boot loop treats it as unavailable
-and falls through. That is safer than a device that binds and then crashes on
-the first draw.
+None of that is a selector's job, so it is not in this project. Shipping a
+`SoftBackend` that throws in `createDevice` was tested and removed: an entry
+that can never be chosen is dead weight in the menu, and the fallback chain
+already works without it.
 
 ## Optional dependency
 
@@ -150,15 +137,12 @@ Polyglass links to upstream instead.
 
 ## Shaders
 
-`ShaderSource.getShader(Identifier, ShaderType)` hands out GLSL text. The GL
-backend compiles it directly; the Vulkan backend compiles to SPIR-V and its
-pipelines consume SPIR-V modules. A software backend reading `ShaderSource`
-therefore sees GLSL, which has to be interpreted (or compiled to SPIR-V first
-and then interpreted). Either way it needs to understand every pipeline the
-game compiles — start with `core/screenquad` and `position_tex_color`.
+Not Polyglass's business: `ShaderSource.getShader(Identifier, ShaderType)` hands
+out GLSL text and whichever backend the game picked consumes it. The selector
+never touches shaders.
 
 ## Non-goals
 
 Live API switching (impossible: the array is consumed before the window exists),
-Metal (no source, restrictive licence), and VulkanMod (1.21.11, pre-26.x
-architecture).
+Metal (no source, restrictive licence), VulkanMod (1.21.11, pre-26.x
+architecture), and any CPU/software renderer (a separate project; see above).

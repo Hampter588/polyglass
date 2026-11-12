@@ -5,7 +5,6 @@ import com.mojang.blaze3d.systems.GpuBackend;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vulkan.VulkanBackend;
 import dev.polyglass.Probe;
-import dev.polyglass.backend.software.SoftBackend;
 import dev.polyglass.config.PolyglassConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,7 +32,6 @@ public final class BackendCatalog {
     public static final String VULKAN = "vulkan";
     public static final String OPENGL = "opengl";
     public static final String DX12 = "dx12";
-    public static final String SOFTWARE = "software";
 
     /**
      * DirectXMod's backend, referenced by name only. Polyglass does not bundle
@@ -77,9 +75,6 @@ public final class BackendCatalog {
         putIfAbsent(pool, VULKAN, VulkanBackend::new);
         if (Probe.isWindows()) {
             putIfAbsent(pool, DX12, BackendCatalog::newDx12);
-        }
-        if (config.softwareEnabled()) {
-            putIfAbsent(pool, SOFTWARE, SoftBackend::new);
         }
 
         List<String> available = new ArrayList<>(pool.keySet());
@@ -131,9 +126,6 @@ public final class BackendCatalog {
         if (backend instanceof VulkanBackend) {
             return VULKAN;
         }
-        if (backend instanceof SoftBackend) {
-            return SOFTWARE;
-        }
         return null;
     }
 
@@ -146,7 +138,6 @@ public final class BackendCatalog {
         return switch (BackendPlan.normalize(id)) {
             case VULKAN, OPENGL -> true;
             case DX12 -> Probe.isWindows() && Probe.hasClass(DX12_CLASS);
-            case SOFTWARE -> PolyglassConfig.get().softwareEnabled();
             default -> false;
         };
     }

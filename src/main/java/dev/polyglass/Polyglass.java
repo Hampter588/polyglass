@@ -36,9 +36,8 @@ public final class Polyglass implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
         PolyglassConfig config = PolyglassConfig.get();
-        LOG.info("[polyglass] config {} — backend={}, order={}, software={}, debug={}",
-                PolyglassConfig.path(), config.backend(), config.order(),
-                config.softwareEnabled(), config.debug());
+        LOG.info("[polyglass] config {} — backend={}, order={}, debug={}",
+                PolyglassConfig.path(), config.backend(), config.order(), config.debug());
         LOG.info("[polyglass] DirectXMod present: {}, platform: {}, offered: {}",
                 Probe.hasClass(DX12_CLASS), System.getProperty("os.name"), BackendCatalog.lastAvailable());
 
