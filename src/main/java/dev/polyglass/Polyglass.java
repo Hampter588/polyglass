@@ -38,8 +38,8 @@ public final class Polyglass implements ClientModInitializer {
         PolyglassConfig config = PolyglassConfig.get();
         LOG.info("[polyglass] config {} — backend={}, order={}, debug={}",
                 PolyglassConfig.path(), config.backend(), config.order(), config.debug());
-        LOG.info("[polyglass] DirectXMod present: {}, platform: {}, offered: {}",
-                Probe.hasClass(DX12_CLASS), System.getProperty("os.name"), BackendCatalog.lastAvailable());
+        LOG.info("[polyglass] DirectXMod present: {}, platform: {}",
+                Probe.hasClass(DX12_CLASS), System.getProperty("os.name"));
 
         menuKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
                 "key.polyglass.menu",
@@ -51,8 +51,9 @@ public final class Polyglass implements ClientModInitializer {
             // The device is created after mod entrypoints, so the first tick is
             // the earliest point at which the real backend is known.
             if (reported.compareAndSet(false, true)) {
-                LOG.info("[polyglass] running on: {} (asked for: {})",
-                        BackendCatalog.runningBackend(), BackendCatalog.lastPlan());
+                LOG.info("[polyglass] offered: {}, asked for: {}, running on: {}",
+                        BackendCatalog.lastAvailable(), BackendCatalog.lastPlan(),
+                        BackendCatalog.runningBackend());
             }
             while (menuKey.consumeClick()) {
                 client.setScreenAndShow(new PolyglassScreen());

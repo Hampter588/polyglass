@@ -86,6 +86,13 @@ Selection: explicit `backend` first (if usable), then `order`, then anything
 still available. Unknown or unavailable ids are dropped silently; `debug: true`
 logs the resolved plan and the running backend.
 
+## Requirements
+
+Fabric Loader 0.16+ and **Fabric API** (the key bind and tick hooks come from
+it). Minecraft **26.2** exactly — not 26.1, not 26.3.
+
+DirectXMod is optional; see above.
+
 ## Building
 
 ```powershell
