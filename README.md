@@ -1,7 +1,7 @@
 # Polyglass
 
 A graphics backend selector for Minecraft 26.2: pick Vulkan, OpenGL, Direct3D 12
-or a CPU rasteriser from one menu, with an automatic fallback chain.
+or a CPU rasteriser from one button, with an automatic fallback chain.
 
 Pinned to **26.2** on purpose: DirectXMod, the only working D3D12 backend,
 targets it. 26.3 moved the GPU API from `com.mojang.blaze3d.systems` to
