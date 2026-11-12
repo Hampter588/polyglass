@@ -41,6 +41,12 @@ public final class Polyglass implements ClientModInitializer {
         LOG.info("[polyglass] DirectXMod present: {}, platform: {}",
                 Probe.hasClass(DX12_CLASS), System.getProperty("os.name"));
 
+        // Force the pause screen to load now, so its mixin is applied at boot.
+        // Otherwise a bad injection would only surface the first time the player
+        // presses Escape, and look like "the menu is broken" in-game.
+        LOG.debug("[polyglass] pause screen ready: {}",
+                net.minecraft.client.gui.screens.PauseScreen.class.getName());
+
         menuKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
                 "key.polyglass.menu",
                 InputConstants.Type.KEYSYM,

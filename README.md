@@ -50,11 +50,14 @@ toggle.
 
 Two ways in:
 
-- **Options → Video Settings → `Graphics API: … — Polyglass…`**, a row appended
-  to the vanilla screen. Done returns to Video Settings.
+- **Esc → `Polyglass: Vulkan…`**, a full-width row at the bottom of the pause
+  menu. This is the one that always works, including with DirectXMod installed.
+- **Options → Video Settings → `Graphics API: … — Polyglass…`**, appended to
+  the vanilla screen. Absent when DirectXMod is installed, because it replaces
+  that screen with its own (see below).
 - **F9** (rebindable under Controls → Polyglass) from anywhere in game.
 
-Both open the same picker:
+All of them open the same picker:
 
 ```
 Polyglass — graphics backend
@@ -115,12 +118,12 @@ vanilla's: replacing an `OptionsList` entry is far more fragile than appending
 one, and nothing can drift while the two are written through.
 
 DirectXMod replaces `VideoSettingsScreen` wholesale with its own
-`Dx12VideoSettingsScreen`, which overrides `init()` without calling `super`.
-That screen has no `OptionsList`, so the Polyglass row is not injected there —
-F9 still works. In exchange, DirectXMod greys their Graphics API row out and
-shows the backend the session actually created, so the two do not contradict
-each other.
-
+`Dx12VideoSettingsScreen`, which overrides `init()` without calling `super` and
+draws/hit-tests its rows by hand. That screen has no `OptionsList`, so the
+Polyglass row cannot be injected into it — hence the pause-menu button, which
+DirectXMod does not touch. In exchange, DirectXMod greys their Graphics API row
+out and shows the backend the session actually created, so the two do not
+contradict each other.
 
 ## Requirements
 
@@ -156,6 +159,7 @@ src/main/java/dev/polyglass/
   mixin/PreferredGraphicsApiMixin.java   reorders the backend array (priority 500)
   mixin/VideoSettingsScreenMixin.java    adds the Polyglass row to Video Settings
   mixin/OptionsSubScreenAccessor.java    accessor for the protected OptionsList
+  mixin/PauseScreenMixin.java            adds the pause-menu button
 ```
 
 ## What is not included
