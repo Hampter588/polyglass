@@ -20,10 +20,16 @@ import java.util.List;
  *
  * <p>Read lazily from the mixin, which runs before {@code ClientModInitializer},
  * so nothing here may assume the client is initialised.</p>
+ *
+ * <p>This class also reads vanilla's {@code preferredGraphicsBackend} straight
+ * out of {@code options.txt}. Deliberately no {@code Options} import: the mixin
+ * may run before the game has finished constructing it, and a raw line read has
+ * no ordering requirements.</p>
  */
 public final class PolyglassConfig {
 
     private static final String FILE_NAME = "polyglass.json";
+    private static final String VANILLA_KEY = "preferredGraphicsBackend";
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static volatile PolyglassConfig instance;
 
@@ -129,14 +135,52 @@ public final class PolyglassConfig {
     }
 
     /**
-     * Vulkan first everywhere it exists. DX12 only makes sense on Windows and
-     * only when DirectXMod is installed, but listing it costs nothing: an
-     * unavailable id is dropped before the list reaches the game.
+     * Vanilla's own Graphics API setting, as written in {@code options.txt}:
+     * {@code "default"}, {@code "opengl"} or {@code "vulkan"}.
+     */
+    public static String vanillaPreference() {
+        Path file = FabricLoader.getInstance().getGameDir().resolve("options.txt");
+        if (!Files.isRegularFile(file)) {
+            return "default";
+        }
+        try {
+            return parseVanillaPreference(Files.readAllLines(file, StandardCharsets.UTF_8));
+        } catch (IOException | RuntimeException e) {
+            return "default";
+        }
+    }
+
+    /** Pure parser so the format can be tested without a game directory. */
+    static String parseVanillaPreference(List<String> optionsLines) {
+        for (String line : optionsLines) {
+            if (line == null || !line.startsWith(VANILLA_KEY + ":")) {
+                continue;
+            }
+            String value = line.substring(VANILLA_KEY.length() + 1).trim();
+            if (value.length() >= 2 && value.startsWith("\"") && value.endsWith("\"")) {
+                value = value.substring(1, value.length() - 1);
+            }
+            return switch (BackendPlan.normalize(value)) {
+                case "opengl" -> "opengl";
+                case "vulkan" -> "vulkan";
+                default -> "default";
+            };
+        }
+        return "default";
+    }
+
+    /**
+     * The default order follows vanilla's Graphics API setting when the user has
+     * not written an explicit {@code order}. That keeps the vanilla dropdown
+     * meaningful: Polyglass extends it rather than ignoring it.
      */
     public static List<String> defaultOrder() {
+        boolean preferOpenGl = "opengl".equals(vanillaPreference());
         if (Probe.isWindows()) {
-            return List.of("vulkan", "dx12", "opengl");
+            return preferOpenGl
+                    ? List.of("opengl", "vulkan", "dx12")
+                    : List.of("vulkan", "dx12", "opengl");
         }
-        return List.of("vulkan", "opengl");
+        return preferOpenGl ? List.of("opengl", "vulkan") : List.of("vulkan", "opengl");
     }
 }

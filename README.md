@@ -54,6 +54,7 @@ toggle.
 Polyglass — graphics backend
 This session: OpenGL 4.6
 Order: vulkan → dx12 → opengl
+Vanilla API: default
 
 ▶ Auto — follow order
    Vulkan (vanilla)
@@ -85,6 +86,25 @@ Changes apply on the next launch.
 Selection: explicit `backend` first (if usable), then `order`, then anything
 still available. Unknown or unavailable ids are dropped silently; `debug: true`
 logs the resolved plan and the running backend.
+
+### Vanilla's Graphics API setting
+
+26.2 ships its own **Options → Video Settings → Graphics API** dropdown, stored
+in `options.txt` as `preferredGraphicsBackend:"default" | "opengl" | "vulkan"`.
+It does not filter anything — `getBackendsToTry()` always returns both backends,
+the setting only decides which comes first.
+
+Polyglass replaces it as the place you actually change this:
+
+- The picker **writes through** to that option, so `options.txt` and
+  `polyglass.json` never disagree. `dx12` and `auto` map to `default`, since
+  vanilla has no values for them.
+- When `order` is absent, the default order **follows** the vanilla setting:
+  `vulkan` → `vulkan, dx12, opengl`; `opengl` → `opengl, vulkan, dx12`.
+- An explicit `backend` in `polyglass.json` always wins over the dropdown.
+
+The vanilla row is still visible in Video Settings; it is a mirror, not a second
+switch.
 
 ## Requirements
 

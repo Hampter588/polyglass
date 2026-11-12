@@ -4,6 +4,8 @@ import dev.polyglass.Probe;
 import dev.polyglass.backend.BackendCatalog;
 import dev.polyglass.backend.BackendPlan;
 import dev.polyglass.config.PolyglassConfig;
+import net.minecraft.client.Options;
+import net.minecraft.client.PreferredGraphicsApi;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.StringWidget;
 import net.minecraft.client.gui.screens.ConfirmLinkScreen;
@@ -43,14 +45,15 @@ public final class PolyglassScreen extends Screen {
     protected void init() {
         super.init();
 
-        int top = Math.max(8, (this.height - 196) / 2);
+        int top = Math.max(8, (this.height - 208) / 2);
         int left = this.width / 2 - ROW_WIDTH / 2;
 
         addLine("Polyglass — graphics backend", left, top);
         addLine("This session: " + BackendCatalog.runningBackend(), left, top + 14);
         addLine("Order: " + String.join(" → ", PolyglassConfig.get().order()), left, top + 26);
+        addLine("Vanilla API: " + PolyglassConfig.vanillaPreference(), left, top + 38);
 
-        int y = top + 44;
+        int y = top + 56;
         for (Choice choice : choices()) {
             addRenderableWidget(Button.builder(Component.literal(choice.label()), button -> select(choice.id()))
                     .bounds(left, y, ROW_WIDTH, ROW_HEIGHT)
@@ -69,6 +72,7 @@ public final class PolyglassScreen extends Screen {
         int bottom = rowY + 40;
         addRenderableWidget(Button.builder(Component.literal("Reset"), button -> {
             PolyglassConfig.get().reset();
+            syncVanilla(BackendPlan.AUTO);
             dirty = true;
             statusLine = "Reset to defaults.";
             rebuild();
@@ -121,8 +125,31 @@ public final class PolyglassScreen extends Screen {
             return;
         }
         config.setBackend(id);
+        syncVanilla(id);
         dirty = true;
         rebuild();
+    }
+
+    /**
+     * Keeps vanilla's own Graphics API option in step with the Polyglass choice,
+     * so {@code options.txt} never contradicts {@code polyglass.json}. Mapped
+     * down to what vanilla can express: {@code dx12} and {@code auto} become
+     * {@code default}, because vanilla has no value for them.
+     */
+    private void syncVanilla(String id) {
+        Options options = this.minecraft == null ? null : this.minecraft.options;
+        if (options == null) {
+            return;
+        }
+        PreferredGraphicsApi target = switch (BackendPlan.normalize(id)) {
+            case BackendCatalog.VULKAN -> PreferredGraphicsApi.VULKAN;
+            case BackendCatalog.OPENGL -> PreferredGraphicsApi.OPENGL;
+            default -> PreferredGraphicsApi.DEFAULT;
+        };
+        if (options.preferredGraphicsBackend().get() != target) {
+            options.preferredGraphicsBackend().set(target);
+            options.save();
+        }
     }
 
     private Component dx12Label() {
