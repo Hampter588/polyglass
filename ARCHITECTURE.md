@@ -1,97 +1,137 @@
 # Architecture
 
-## Layers
+## The seam (verified against the 26.3 jar)
 
-```
-┌──────────────────────────────────────────────┐
-│ Minecraft (26.3)                             │
-│  GameRenderer · LevelRenderer · GUI          │
-└───────────────────┬──────────────────────────┘
-                    │  game-side hook (mixin / replaced renderer)
-┌───────────────────▼──────────────────────────┐
-│ dev.polyglass.api                            │
-│  Device · Swapchain · CommandList ·          │
-│  Buffer · Texture · Pipeline · Capabilities  │
-└───────────────────┬──────────────────────────┘
-       ┌────────────┴─────────────┬──────────────┐
-┌──────▼──────┐ ┌──────▼──────┐ ┌──▼───────┐ ┌──▼──────┐
-│ opengl      │ │ vulkan      │ │ d3d12    │ │ metal   │
-│ (LWJGL)     │ │ (LWJGL)     │ │ (FFM)    │ │ (FFM)   │
-└─────────────┘ └─────────────┘ └──────────┘ └─────────┘
-        ▲ render paths: STANDARD · MESH (mesh shaders)
+Minecraft 26.3 chooses its graphics backend through one method:
+
+```java
+// net.minecraft.client.PreferredGraphicsApi
+public GpuBackend[] getBackendsToTry();
 ```
 
-Rules that keep this sane:
+`PreferredGraphicsApi` is an enum: `DEFAULT`, `OPENGL`, `VULKAN`. The game calls
+`getBackendsToTry()` once during boot, then walks the array:
 
-- **`api/` never imports Minecraft and never imports a backend.** It is plain
-  Java records and interfaces. It can be unit-tested without a game.
-- **A backend never imports another backend.** Shared code goes in `backend/`.
-- **Render paths never touch an API directly.** They call `Device`.
-- **Capabilities, not `if (api == VULKAN)`.** If a feature is missing, gate it
-  through `Capabilities` so a new backend gets it for free.
+```
+for (GpuBackend backend : preferred.getBackendsToTry()) {
+    backend.loadLibrary();
+    long window = backend.createWindow(title, width, height, shareWith);
+    GpuDevice device = backend.createDevice(debugOptions);   // throws BackendCreationException
+    // success -> keep it; failure -> unloadLibrary(), next candidate
+}
+```
 
-## Integration seam
+That is the whole integration surface. Polyglass is one `@Inject` on that
+method's `RETURN`. It does not implement a renderer, a device lifecycle, a
+shader compiler, or a window.
 
-Two options, and this choice is the single most important decision in the
-project:
+```
+┌──────────────────────────────────────────────────────────┐
+│ Minecraft 26.3                                           │
+│  PreferredGraphicsApi.getBackendsToTry()                 │
+└───────────────────┬──────────────────────────────────────┘
+                    │ mixin, @At("RETURN")
+┌───────────────────▼──────────────────────────────────────┐
+│ dev.polyglass.backend                                    │
+│  BackendPlan     pure ordering policy (unit tested)      │
+│  BackendCatalog  GpuBackend[] assembly + merge           │
+└───────────────────┬──────────────────────────────────────┘
+        ┌───────────┴────────────┬─────────────────┐
+┌───────▼────────┐ ┌─────────────▼──────┐ ┌────────▼─────────┐
+│ GlBackend      │ │ VulkanBackend      │ │ SoftBackend      │
+│ (vanilla)      │ │ (vanilla)          │ │ (Polyglass)      │
+└────────────────┘ └────────────────────┘ └──────────────────┘
+      plus, if the user installed it: com.xgdt.dx12.dx12.Dx12Backend
+```
 
-1. **Implement Blaze3D's device layer.** Since 1.21.5 the game routes GPU work
-   through `com.mojang.blaze3d.systems.GpuDevice` / `GpuBuffer` /
-   `RenderPipeline`. If 26.3 still exposes that seam, Polyglass can supply a
-   non-GL `GpuDevice` and keep vanilla's renderer intact. Small blast radius,
-   huge payoff.
-2. **Replace the renderer.** Own `GameRenderer` + `LevelRenderer` and draw the
-   world ourselves, the way VulkanMod does. Much more work, but it is the only
-   way to get the mesh-shader path and real wins on chunk geometry.
+## 26.3 moved the GPU API
 
-**Verify option 1 first** against a decompiled 26.3 jar (`gradlew genSources`).
-If the seam is usable, take it for the standard path and use option 2 only for
-the mesh path. If it is not, this becomes a VulkanMod-scale project.
+In 26.2 the interface lived at `com.mojang.blaze3d.systems.GpuBackend`. In 26.3
+it moved to a separate library inside the game jar:
 
-## Backend contract
+```
+com.mojang.renderpearl.api.device.GpuBackend
+com.mojang.renderpearl.api.device.GpuDevice
+com.mojang.renderpearl.api.device.BackendCreationException   (checked)
+com.mojang.renderpearl.backend.opengl.GlBackend
+com.mojang.renderpearl.backend.vulkan.VulkanBackend
+```
 
-- `isAvailable()` is a cheap probe and must never throw. It answers "could this
-  start here?", not "is the GPU good?".
-- `createDevice()` does the expensive work: instance/device creation, adapter
-  pick, extension query, native library load.
-- Failure at `createDevice()` is recoverable: `Backends.select` already picked a
-  chain, and the caller may move to the next entry.
-- `close()` is idempotent.
+The interface also changed shape:
 
-## Frames and threading
+```java
+public interface GpuBackend {
+    String getName();
+    void loadLibrary() throws BackendCreationException;
+    void unloadLibrary();
+    long createWindow(String title, int width, int height, long shareWith);
+    GpuDevice createDevice(GpuDebugOptions options) throws BackendCreationException;
+}
+```
 
-- One render thread. `Device` is render-thread-confined.
-- `framesInFlight` (default 2) swapchain images; resources are referenced by
-  frame index and recycled on fence signal.
-- `waitIdle()` only on resize, screenshot, resource reload and shutdown.
-- Uploads go through a transfer queue where the backend has one; the OpenGL
-  backend emulates it with orphaning + `glFenceSync`.
+The backend now owns window creation. The 26.2 methods
+`setWindowHints()` / `handleWindowCreationErrors(...)` / `createDevice(long window, …)`
+are gone.
 
-## Capability gating
+**Consequence:** DirectXMod, which targets 26.2, cannot run on 26.3 — its
+`Dx12Backend` implements an interface that no longer exists, and its mixin
+returns an array of a type that no longer exists. The `dx12` id is therefore
+inert until that mod is ported (or Polyglass pins to 26.2).
 
-`Capabilities` is produced once at device creation and is the only source of
-truth. A backend that cannot fill in a field must report the conservative value
-rather than guess. `RenderPaths.resolve` uses it to downgrade MESH → STANDARD.
+## Shaders
 
-## The hard parts (in order of pain)
+`GpuDevice.compilePipeline(RenderPipeline, ShaderSource, Executor)` is async and
+returns `CompletableFuture<CompiledRenderPipeline.Pending>`. `ShaderSource`
+hands out GLSL text via `getShader(Identifier, ShaderType)`. The frontend
+(`com.mojang.renderpearl.frontend.shaders.GlslCompiler`, `SPIRVModule`,
+`PipelineBuilder`) does GLSL → SPIR-V, and backends consume SPIR-V
+(`com.mojang.renderpearl.backend.api.SpvModule`).
 
-1. **Shaders.** Vanilla ships GLSL. Vulkan needs SPIR-V, D3D12 needs DXIL,
-   Metal needs MSL. Plan: GLSL → SPIR-V (glslang) as the canonical form, then
-   SPIR-V → DXIL/MSL at build time, cached on disk. This is most of the work.
-   Exception: the MoltenVK route on macOS does the SPIR-V → MSL step itself,
-   so that path only needs the GLSL → SPIR-V half.
-2. **Resource lifetime.** GL lets you delete anything at any time. Vulkan/D3D12
-   require deferred destruction tied to frames in flight.
-3. **State emulation.** `GlStateManager`, VAOs, client-side arrays, and
-   `glBlitFramebuffer` have no direct equivalent. Each needs a translation
-   layer, and each is a correctness bug waiting to happen.
-4. **Present/format differences.** sRGB handling, depth precision, MSAA resolve,
-   and window resize all behave differently per API.
-5. **Mod compatibility.** Sodium and Iris hook deep into the GL renderer.
-   Assume they are incompatible until proven otherwise, and detect + warn
-   instead of crashing.
+This is the reason a software backend is not a weekend job: it has to either
+reuse the SPIR-V front half and interpret/execute SPIR-V, or run the GLSL path
+and interpret that. Either way it needs to understand every pipeline the game
+compiles.
 
-## Non-goals for M0
+## Competing mixins
 
-Compute, ray tracing, HDR output, multi-GPU, and a settings UI. The config file
-is the UI until the standard path renders a correct frame.
+DirectXMod injects at the same `RETURN` with `cancellable = true`. Two injectors
+that both call `setReturnValue` would fight, and the last one applied would win.
+`BackendCatalog` avoids that by **merging**: it reads the array it is given,
+reuses the instances already in it, adds the ones it can construct, and only
+then reorders. Unknown backends from other mods are preserved at the end. The
+result converges regardless of application order.
+
+## Selection policy
+
+`BackendPlan.resolve(requested, order, available)` is pure `java.util` and unit
+tested:
+
+1. explicit `backend` (if usable),
+2. each id in `order` (if usable),
+3. any remaining usable id, so a newly added backend is never dead on arrival.
+
+Unavailable ids are dropped, never fatal. If the plan comes out empty, the
+original vanilla array is returned untouched.
+
+## Software backend
+
+Two independent problems:
+
+1. **Rasterisation.** `SoftRaster` is done: ARGB colour buffer, float depth
+   buffer, clipped filled triangles, tested headlessly.
+2. **Presentation.** Not designed yet, and it is the part that decides whether
+   this is useful. A CPU framebuffer still has to reach a window. Options are a
+   platform-native blit (Win32 `StretchDIBits`, X11 SHM, Cocoa `CALayer`) with
+   its own window and input plumbing, or borrowing a GL context purely as a
+   blit target. The first is real native work per OS; the second reuses the
+   driver you were trying to avoid.
+
+Until both exist, `SoftBackend.createDevice` throws `BackendCreationException`
+on purpose, so the boot loop treats it as unavailable and falls through. That
+is safer than a device that binds and then crashes on the first draw.
+
+## Non-goals
+
+Live API switching (impossible: the array is consumed before the window exists),
+Metal (no source, restrictive licence), and VulkanMod (1.21.11, pre-26.x
+architecture).

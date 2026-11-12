@@ -1,0 +1,11 @@
+{
+  "required": true,
+  "package": "dev.polyglass.mixin",
+  "compatibilityLevel": "JAVA_25",
+  "client": [
+    "PreferredGraphicsApiMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

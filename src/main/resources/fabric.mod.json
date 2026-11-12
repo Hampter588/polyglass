@@ -3,7 +3,7 @@
   "id": "polyglass",
   "version": "${version}",
   "name": "Polyglass",
-  "description": "Pluggable graphics backends for Minecraft: Vulkan, Direct3D 12, Metal and OpenGL, plus an optional mesh-shader chunk path.",
+  "description": "Graphics backend selector for Minecraft 26.x: pick Vulkan, OpenGL, Direct3D 12 (via DirectXMod) or the experimental CPU rasteriser, with an automatic fallback chain.",
   "authors": [],
   "license": "MIT",
   "environment": "client",
@@ -12,6 +12,9 @@
       "dev.polyglass.Polyglass"
     ]
   },
+  "mixins": [
+    "polyglass.mixins.json"
+  ],
   "depends": {
     "fabricloader": ">=0.19.5",
     "minecraft": "~26.3",

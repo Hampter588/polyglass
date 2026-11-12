@@ -12,13 +12,10 @@ build/
 
 # Run directory
 run/
+logs/
 
 # OS
 .DS_Store
 Thumbs.db
 
-# Native build output
-native/build/
-*.dll
-*.so
-*.dylib
+

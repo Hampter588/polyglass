@@ -33,21 +33,12 @@ dependencies {
     implementation("net.fabricmc:fabric-loader:$loaderVersion")
     implementation("net.fabricmc.fabric-api:fabric-api:$fabricApiVersion")
 
-    // The api/ package has no Minecraft imports, so it is testable on the JVM.
+    // BackendPlan and SoftRaster have no Minecraft imports, so they are
+    // testable on a bare JVM.
     testImplementation(platform("org.junit:junit-bom:5.11.4"))
     testImplementation("org.junit.jupiter:junit-jupiter")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
     testRuntimeOnly("org.slf4j:slf4j-simple:2.0.16")
-
-    // Vulkan bindings are NOT bundled with Minecraft. Uncomment once the backend
-    // work starts (M2) and pin the version to the LWJGL version the game ships:
-    //
-    //   val lwjglVersion = "..." // read from the decompiled game's dependencies
-    //   implementation("org.lwjgl:lwjgl-vulkan:$lwjglVersion")
-    //   runtimeOnly("org.lwjgl:lwjgl-vulkan:$lwjglVersion:natives-windows")
-    //   runtimeOnly("org.lwjgl:lwjgl-vulkan:$lwjglVersion:natives-linux")
-    //
-    // Direct3D 12 and Metal have no LWJGL bindings at all; see native/README.md.
 }
 
 tasks.withType<JavaCompile>().configureEach {

@@ -1,85 +1,72 @@
 # Roadmap
 
-A full renderer replacement is a multi-year project measured in person-years,
-not weekends. VulkanMod — one API, one Minecraft version at a time — has taken
-years. The milestones below are ordered so that every stage ends with a game
-that starts and renders something, which is the only way to keep a project like
-this alive.
+Polyglass is a selector, not a renderer. Vulkan and OpenGL come from the game;
+DX12 comes from DirectXMod when that mod runs on the targeted version; the CPU
+fallback is the only renderer Polyglass owns.
 
-## M0 — Scaffold ✅
+## M0 — Thin selector ✅
 
-- [x] Gradle + Fabric setup for 26.3 / Java 25
-- [x] Backend SPI (`Device`, `Swapchain`, `CommandList`, resources)
-- [x] Backend registry, probing, fallback selection
-- [x] `polyglass.json` config
-- [x] Render-path split (STANDARD / MESH) and capability gating
-- [x] `null` headless backend plus JUnit coverage of selection and frame submission
-- [x] `angle` backend registration + probing (device creation is M3.5)
-- [x] Docs: architecture, backend matrix, native shim contract
+- [x] Gradle + Fabric for 26.3 / Java 25
+- [x] Verified the seam against the 26.3 jar: `PreferredGraphicsApi#getBackendsToTry()`
+- [x] Single mixin that reorders the candidate array and merges other mods' entries
+- [x] `BackendPlan` ordering policy, pure Java, 8 unit tests
+- [x] `polyglass.json` (backend, order, software toggle, debug)
+- [x] F9 picker screen with restart notice
+- [x] Graceful degradation for unavailable backends
 
-## M1 — OpenGL backend, real device
+## S1 — CPU raster core ✅
 
-- [ ] Decide the integration seam (Blaze3D `GpuDevice` vs. renderer replacement) — see ARCHITECTURE.md
-- [ ] `OpenGlDevice` wrapping the game's existing context
-- [ ] `OpenGlSwapchain` on the GLFW window
-- [ ] Buffers, textures, pipelines, command lists
-- [ ] Render one triangle through `Device` in-game
-- [ ] Acceptance: vanilla world renders with Polyglass owning the pipeline, no visual diff
+- [x] ARGB colour buffer + float depth buffer
+- [x] Clipped, flat-shaded triangle fill with depth test
+- [x] Headless tests (coverage, ordering, clipping, degenerate)
 
-## M2 — Vulkan backend
+## S2 — Software backend: device binding
 
-- [ ] `lwjgl-vulkan` dependency pinned to the game's LWJGL version
-- [ ] Instance/device/adapter selection, validation in debug builds
-- [ ] Swapchain via `VK_KHR_surface` + `VK_KHR_swapchain` (GLFW handles)
-- [ ] Memory allocator, deferred deletion, frames in flight
-- [ ] GLSL → SPIR-V shader compilation + disk cache
-- [ ] Acceptance: standard path at parity with M1 on Windows and Linux
+- [ ] `SoftDevice implements GpuDevice`: buffers, textures, samplers, texture views
+- [ ] `CommandEncoder` → `SoftRaster` (clear, draw, viewport/scissor)
+- [ ] `compilePipeline`: consume the frontend's SPIR-V and run a minimal
+      vertex/fragment interpreter, starting with `core/screenquad` and
+      `position_tex_color`
+- [ ] Offscreen acceptance: render a frame into `SoftRaster` and dump a PNG from
+      a JUnit test — no window, no game
+- [ ] Keep `createDevice` throwing until the offscreen frame is correct
 
-## M3 — Direct3D 12 backend
+## S3 — Software backend: presentation
 
-- [ ] `native/polyglass_d3d12` C ABI shim (see native/README.md)
-- [ ] FFM bindings, no JNI
-- [ ] Command queues, descriptor heaps, root signatures
-- [ ] SPIR-V → DXIL at build time
-- [ ] Acceptance: parity with M2 on Windows
+This is the decision that makes or breaks the tier, and it is per-OS native work.
 
-## M3.5 — ANGLE compatibility tier
+- [ ] Choose the blit path: Win32 `StretchDIBits`, X11 SHM, or Cocoa `CALayer`
+- [ ] Own the window (the 26.3 `GpuBackend.createWindow` contract now allows it)
+- [ ] Wire input so the game still receives keyboard/mouse
+- [ ] Acceptance: title screen and a flat world at 320×240 on a machine with no
+      working Vulkan *and* no working OpenGL driver
 
-- [ ] Bundle ANGLE natives (`libEGL` + `libGLESv2`) per platform, unpack at runtime
-- [ ] EGL context + surface on the GLFW window, GL ES 3.1 bindings
-- [ ] Keep this tier's shaders inside ES 3.1 (no desktop-GL-only features)
-- [ ] Config knob for the ANGLE platform (`auto` | `d3d11` | `metal` | `vulkan` | `gl`)
-- [ ] Acceptance: world renders on a Windows VM / RDP session where Vulkan and
-      native D3D12 are unavailable
+If S3 turns out to cost more than it returns, stop at S2: the raster core is
+still useful for CI screenshots and golden-image tests.
 
-## M4 — Metal backend
+## D1 — Direct3D 12
 
-- [ ] `native/polyglass_metal` shim (ObjC + C ABI)
-- [ ] FFM bindings, `CAMetalLayer` on the GLFW `NSView`
-- [ ] SPIR-V → MSL, pipeline state caching
-- [ ] MoltenVK path kept as a comparison/debug fallback
-- [ ] Acceptance: parity with M2 on macOS
+Blocked upstream, not on Polyglass: DirectXMod is on Minecraft 26.2 and the
+26.2 → 26.3 GPU API change (`com.mojang.blaze3d.systems.GpuBackend` →
+`com.mojang.renderpearl.api.device.GpuBackend`, plus backend-owned window
+creation) is source-breaking.
 
-## M5 — Mesh-shader render path
+- [ ] Track DirectXMod for a 26.3 branch
+- [ ] When it lands: verify `BackendCatalog` picks it up with no code change
+- [ ] Alternative: pin Polyglass to 26.2, where it works today
 
-- [ ] Chunk section → meshlet build (CPU, then GPU)
-- [ ] `GL_NV_mesh_shader` implementation (Nvidium's technique)
-- [ ] `VK_EXT_mesh_shader` implementation
-- [ ] Frustum + occlusion culling in the mesh pipeline
-- [ ] Acceptance: measurable win over the standard path on NVIDIA hardware,
-      graceful downgrade everywhere else
+## X1 — Optional integration probe
 
-## M6 — Hardening
+- [ ] Show, in the picker, which backends could actually create a device
+- [ ] Warn instead of silently reordering when another mod owns the same mixin
+- [ ] `polyglass doctor` log block: OS, GPU, available backends, missing natives
 
-- [ ] Shader cache invalidation, first-run compile budget
-- [ ] Crash reporting that names the backend and pipeline
-- [ ] Screenshot / video / OBS compatibility
-- [ ] Sodium/Iris detection with an explicit "unsupported" screen
-- [ ] Settings UI (backend picker + fallback ordering)
+## Explicitly out of scope
 
-## Open decisions
-
-- Licensing of vendor shader toolchains (glslang, DXC, SPIRV-Cross) and whether
-  they ship as natives or are invoked at build time.
-- Whether mods get a public extension point for custom render paths.
-- Minimum GPU: Vulkan 1.2 vs 1.3, D3D12 feature level 12_0 vs 12_1, Metal Apple7+.
+- **Live API switching.** The array is consumed once, before the window exists,
+  and a `GpuDevice` owns everything created after it. No teardown path exists.
+- **Metal (MetalRender).** No source in its repository, macOS/Apple Silicon
+  only, and its licence forbids bundling without written permission.
+- **VulkanMod.** Targets 1.21.11 and replaces `LevelRenderer` itself; it does not
+  implement the `GpuBackend` seam and cannot coexist with 26.x.
+- **A Polyglass renderer for Vulkan/OpenGL.** Those already exist in the game.

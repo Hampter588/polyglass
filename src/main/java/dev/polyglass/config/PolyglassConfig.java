@@ -2,73 +2,136 @@ package dev.polyglass.config;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
-import dev.polyglass.Polyglass;
 import dev.polyglass.Probe;
+import dev.polyglass.backend.BackendPlan;
+import net.fabricmc.loader.api.FabricLoader;
 
+import java.io.IOException;
+import java.io.Reader;
+import java.io.Writer;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
- * User-facing backend selection. Written to {@code config/polyglass.json} on
- * first launch; unknown fields are dropped on save.
+ * {@code config/polyglass.json}.
+ *
+ * <p>Read lazily from the mixin, which runs before {@code ClientModInitializer},
+ * so nothing here may assume the client is initialised.</p>
  */
 public final class PolyglassConfig {
 
-    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final String FILE_NAME = "polyglass.json";
+    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
+    private static volatile PolyglassConfig instance;
 
-    /** {@code auto} | {@code opengl} | {@code vulkan} | {@code d3d12} | {@code metal} | {@code mesh}. */
-    public String backend = "auto";
+    /** Explicit backend id, or {@code auto}. */
+    private String backend = BackendPlan.AUTO;
 
-    /** Tried in order when {@link #backend} is unavailable or its device fails to initialise. */
-    public List<String> fallback = defaultFallback();
+    /** Preference order for {@code auto}. Null means "use the platform default". */
+    private List<String> order;
 
-    /** Allow the mesh-shader chunk path (GL_NV_mesh_shader / VK_EXT_mesh_shader). */
-    public boolean meshPath = true;
+    /** Opt in to the CPU rasteriser once it can actually produce a frame. */
+    private boolean enableSoftware = false;
 
-    public boolean debug = false;
+    /** Extra logging of the resolved plan. */
+    private boolean debug = false;
 
-    /** Swapchain images the renderer keeps in flight. 2 is the safe default. */
-    public int framesInFlight = 2;
+    private PolyglassConfig() {
+    }
 
-    public static PolyglassConfig load(Path configDir) {
-        Path file = configDir.resolve(FILE_NAME);
-        try {
-            if (Files.notExists(file)) {
-                PolyglassConfig defaults = new PolyglassConfig();
-                Files.createDirectories(configDir);
-                Files.writeString(file, GSON.toJson(defaults));
-                return defaults;
+    public static PolyglassConfig get() {
+        PolyglassConfig local = instance;
+        if (local != null) {
+            return local;
+        }
+        synchronized (PolyglassConfig.class) {
+            if (instance == null) {
+                instance = load();
             }
-            PolyglassConfig loaded = GSON.fromJson(Files.readString(file), PolyglassConfig.class);
+            return instance;
+        }
+    }
+
+    private static PolyglassConfig load() {
+        Path file = path();
+        if (!Files.isRegularFile(file)) {
+            PolyglassConfig fresh = new PolyglassConfig();
+            fresh.save();
+            return fresh;
+        }
+        try (Reader reader = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
+            PolyglassConfig loaded = GSON.fromJson(reader, PolyglassConfig.class);
             return loaded == null ? new PolyglassConfig() : loaded;
-        } catch (Exception e) {
-            Polyglass.LOGGER.warn("Could not read {}, falling back to defaults", file, e);
+        } catch (IOException | RuntimeException e) {
+            System.err.println("[polyglass] could not read " + file + ": " + e);
             return new PolyglassConfig();
         }
     }
 
-    public String backend() {
-        return backend == null || backend.isBlank() ? "auto" : backend.trim().toLowerCase(java.util.Locale.ROOT);
+    public static Path path() {
+        return FabricLoader.getInstance().getConfigDir().resolve(FILE_NAME);
     }
 
-    public List<String> fallback() {
-        return fallback == null || fallback.isEmpty() ? defaultFallback() : List.copyOf(fallback);
+    public String backend() {
+        return backend == null || backend.isBlank() ? BackendPlan.AUTO : backend;
+    }
+
+    public List<String> order() {
+        if (order == null || order.isEmpty()) {
+            return defaultOrder();
+        }
+        List<String> normalised = new ArrayList<>(order.size());
+        for (String entry : order) {
+            String id = BackendPlan.normalize(entry);
+            if (!id.isEmpty() && !normalised.contains(id)) {
+                normalised.add(id);
+            }
+        }
+        return normalised;
+    }
+
+    public boolean softwareEnabled() {
+        return enableSoftware;
+    }
+
+    public boolean debug() {
+        return debug;
+    }
+
+    public void setBackend(String id) {
+        this.backend = id == null || id.isBlank() ? BackendPlan.AUTO : id;
+        save();
+    }
+
+    public void setSoftwareEnabled(boolean enabled) {
+        this.enableSoftware = enabled;
+        save();
+    }
+
+    public void save() {
+        Path file = path();
+        try {
+            Files.createDirectories(file.getParent());
+            try (Writer writer = Files.newBufferedWriter(file, StandardCharsets.UTF_8)) {
+                GSON.toJson(this, writer);
+            }
+        } catch (IOException e) {
+            System.err.println("[polyglass] could not write " + file + ": " + e);
+        }
     }
 
     /**
-     * Platform-aware default chain. Metal is listed first on macOS because it is
-     * the only API with a first-party driver there; Vulkan is a thin layer over
-     * Metal (MoltenVK) and OpenGL is deprecated.
+     * Vulkan first everywhere it exists. DX12 only makes sense on Windows and
+     * only when DirectXMod is installed, but listing it costs nothing: an
+     * unavailable id is dropped before the list reaches the game.
      */
-    private static List<String> defaultFallback() {
-        if (Probe.isMacOs()) {
-            return List.of("metal", "vulkan", "angle", "opengl");
-        }
+    private static List<String> defaultOrder() {
         if (Probe.isWindows()) {
-            return List.of("vulkan", "d3d12", "angle", "opengl");
+            return List.of("vulkan", "dx12", "opengl", "software");
         }
-        return List.of("vulkan", "angle", "opengl");
+        return List.of("vulkan", "opengl", "software");
     }
 }
