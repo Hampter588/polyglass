@@ -1,6 +1,7 @@
 package dev.polyglass;
 
 import com.mojang.blaze3d.platform.InputConstants;
+import dev.polyglass.backend.BackendCatalog;
 import dev.polyglass.config.PolyglassConfig;
 import dev.polyglass.menu.PolyglassScreen;
 import net.fabricmc.api.ClientModInitializer;
@@ -11,6 +12,8 @@ import net.minecraft.resources.Identifier;
 import org.lwjgl.glfw.GLFW;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Client entry point.
@@ -25,15 +28,19 @@ public final class Polyglass implements ClientModInitializer {
     public static final String MOD_ID = "polyglass";
     public static final Logger LOG = LoggerFactory.getLogger(MOD_ID);
 
+    private static final String DX12_CLASS = BackendCatalog.DX12_CLASS;
+
     private KeyMapping menuKey;
+    private final AtomicBoolean reported = new AtomicBoolean();
 
     @Override
     public void onInitializeClient() {
         PolyglassConfig config = PolyglassConfig.get();
-        LOG.info("[polyglass] config {} — backend={}, order={}, software={}",
-                PolyglassConfig.path(), config.backend(), config.order(), config.softwareEnabled());
-        LOG.info("[polyglass] DirectXMod present: {}, platform: {}",
-                Probe.hasClass("com.xgdt.dx12.dx12.Dx12Backend"), System.getProperty("os.name"));
+        LOG.info("[polyglass] config {} — backend={}, order={}, software={}, debug={}",
+                PolyglassConfig.path(), config.backend(), config.order(),
+                config.softwareEnabled(), config.debug());
+        LOG.info("[polyglass] DirectXMod present: {}, platform: {}, offered: {}",
+                Probe.hasClass(DX12_CLASS), System.getProperty("os.name"), BackendCatalog.lastAvailable());
 
         menuKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
                 "key.polyglass.menu",
@@ -42,6 +49,12 @@ public final class Polyglass implements ClientModInitializer {
                 KeyMapping.Category.register(Identifier.fromNamespaceAndPath(MOD_ID, "main"))));
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
+            // The device is created after mod entrypoints, so the first tick is
+            // the earliest point at which the real backend is known.
+            if (reported.compareAndSet(false, true)) {
+                LOG.info("[polyglass] running on: {} (asked for: {})",
+                        BackendCatalog.runningBackend(), BackendCatalog.lastPlan());
+            }
             while (menuKey.consumeClick()) {
                 client.setScreenAndShow(new PolyglassScreen());
             }

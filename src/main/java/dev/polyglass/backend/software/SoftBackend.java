@@ -10,17 +10,24 @@ import com.mojang.blaze3d.systems.GpuDevice;
 /**
  * CPU rasteriser backend. No GPU, no driver, no window API.
  *
- * <p>Status: the raster core ({@link SoftRaster}) is implemented and tested,
- * but {@link #createDevice} still refuses. That is deliberate — it makes the
- * entry safe to leave in the preference list, because Minecraft treats
- * {@code BackendCreationException} as "try the next candidate" and falls
- * through to Vulkan/OpenGL instead of booting into a half-bound device.</p>
+ * <p>Status: the raster core ({@link SoftRaster}) and a complete offscreen
+ * frame ({@link SoftFrameDump}) work and are tested, but {@link #createDevice}
+ * still refuses. That is deliberate and load-bearing — Minecraft treats
+ * {@code BackendCreationException} as "try the next candidate", so the entry can
+ * sit in the preference list without ever booting into a half-bound device.</p>
  *
- * <p>Remove the throw only when the device can actually produce a frame.</p>
+ * <p>It cannot be removed without a real {@code GpuDeviceBackend}: textures,
+ * buffers, samplers, render passes and pipeline compilation all have to exist
+ * before the frontend will accept the device. Until then the software tier is a
+ * rasteriser that renders to memory, not a display driver. See ROADMAP S2/S3.</p>
  */
 public final class SoftBackend implements GpuBackend {
 
     public static final String NAME = "polyglass-software";
+
+    public static final String UNAVAILABLE =
+            "polyglass: software backend has no GpuDevice binding yet "
+                    + "(raster core only; see the CPU raster test in the picker)";
 
     @Override
     public String getName() {
@@ -47,8 +54,6 @@ public final class SoftBackend implements GpuBackend {
     public GpuDevice createDevice(long window, ShaderSource defaultShaderSource,
                                   GpuDebugOptions debugOptions, Runnable criticalShaderLoader)
             throws BackendCreationException {
-        throw new BackendCreationException(
-                "polyglass: software backend is not complete yet (raster core ready, GpuDevice binding is milestone S2)",
-                BackendCreationException.Reason.OTHER);
+        throw new BackendCreationException(UNAVAILABLE, BackendCreationException.Reason.OTHER);
     }
 }

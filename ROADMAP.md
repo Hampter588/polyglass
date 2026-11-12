@@ -22,14 +22,15 @@ fallback is the only renderer Polyglass owns.
 
 ## S2 — Software backend: device binding
 
-- [ ] `SoftDevice implements GpuDevice`: buffers, textures, samplers, texture views
+- [ ] `SoftDevice`: buffers, textures, samplers, texture views backed by
+      `SoftRaster` and plain arrays (`GpuDeviceBackend` is 16 methods)
 - [ ] `CommandEncoder` → `SoftRaster` (clear, draw, viewport/scissor)
 - [ ] `compilePipeline`: consume the frontend's SPIR-V and run a minimal
       vertex/fragment interpreter, starting with `core/screenquad` and
       `position_tex_color`
-- [ ] Offscreen acceptance: render a frame into `SoftRaster` and dump a PNG from
-      a JUnit test — no window, no game
-- [ ] Keep `createDevice` throwing until the offscreen frame is correct
+- [x] Offscreen acceptance: a complete frame is rendered and asserted headless
+      (`SoftFrameDumpTest`), and dumped as a PNG from the picker
+- [x] Keep `createDevice` throwing until the offscreen frame is correct
 
 ## S3 — Software backend: presentation
 
@@ -58,11 +59,15 @@ When DirectXMod ports to 26.3, the move is: swap the four imports to
 `gradle.properties` + `fabric.mod.json`. `BackendPlan`, the mixin and the menu
 need no changes.
 
-## X1 — Optional integration probe
+## X1 — Diagnostics ✅
 
-- [ ] Show, in the picker, which backends could actually create a device
-- [ ] Warn instead of silently reordering when another mod owns the same mixin
-- [ ] `polyglass doctor` log block: OS, GPU, available backends, missing natives
+- [x] Show, in the picker, which backends exist and whether DirectXMod is
+      installed
+- [x] Report the device the game actually created (`RenderSystem`
+      backend description), so a fallback is visible instead of silent
+- [x] Log block at boot: platform, config, available ids, resolved plan, running
+      backend
+- [ ] Warn when another mod owns the same mixin injection point
 
 ## Explicitly out of scope
 

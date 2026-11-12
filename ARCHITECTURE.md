@@ -114,11 +114,19 @@ original vanilla array is returned untouched.
 
 ## Software backend
 
-Two independent problems:
+Three independent problems:
 
-1. **Rasterisation.** `SoftRaster` is done: ARGB colour buffer, float depth
-   buffer, clipped filled triangles, tested headlessly.
-2. **Presentation.** Not designed yet, and it is the part that decides whether
+1. **Rasterisation.** Done. `SoftRaster` is an ARGB colour buffer, a float depth
+   buffer, and clipped filled triangles. `SoftFrameDump` composes a complete
+   320×240 scene (sky gradient, ground, three depth-tested triangles, one clipped
+   at the frame edge) and writes it as a PNG. Both are tested headlessly.
+2. **Device binding.** In 26.2 a backend returns a `GpuDevice` built from a
+   `GpuDeviceBackend` (16 methods: surfaces, command encoders, samplers,
+   textures, texture views, buffers, pipelines, queries, `DeviceInfo`). Plus
+   `CommandEncoderBackend` and `RenderPassBackend`. Until those exist the
+   frontend cannot accept the device, so this is the real milestone, not a
+   formality.
+3. **Presentation.** Not designed yet, and it is the part that decides whether
    this is useful. In 26.2 the game creates the window and the device exposes
    `createSurface(windowHandle)`; a CPU framebuffer still has to reach that
    window. Options are a platform-native blit (Win32 `StretchDIBits`, X11 SHM,
@@ -126,9 +134,19 @@ Two independent problems:
    context purely as a blit target. The first is real native work per OS; the
    second reuses the driver you were trying to avoid.
 
-Until both exist, `SoftBackend.createDevice` throws `BackendCreationException`
-on purpose, so the boot loop treats it as unavailable and falls through. That
-is safer than a device that binds and then crashes on the first draw.
+Until (2) and (3) exist, `SoftBackend.createDevice` throws
+`BackendCreationException` on purpose, so the boot loop treats it as unavailable
+and falls through. That is safer than a device that binds and then crashes on
+the first draw.
+
+## Optional dependency
+
+DirectXMod (`gl4dx12`) is reached only by reflection on
+`com.xgdt.dx12.dx12.Dx12Backend`. `fabric.mod.json` declares it under
+`recommends`, so Fabric suggests it without ever gating launch. Nothing of
+DirectXMod is bundled: it is Apache-2.0, but it carries Intel XESS and NVIDIA
+DLSS binaries that are not, so redistribution is deliberately out of scope.
+Polyglass links to upstream instead.
 
 ## Shaders
 

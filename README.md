@@ -1,7 +1,7 @@
 # Polyglass
 
 A graphics backend selector for Minecraft 26.2: pick Vulkan, OpenGL, Direct3D 12
-or a CPU rasteriser from one button, with an automatic fallback chain.
+or a CPU rasteriser from one menu, with an automatic fallback chain.
 
 Pinned to **26.2** on purpose: DirectXMod, the only working D3D12 backend,
 targets it. 26.3 moved the GPU API from `com.mojang.blaze3d.systems` to
@@ -34,6 +34,36 @@ game already has all of that.
 `auto` (the default) means "walk the configured order and take the first backend
 that can create a device". A backend that refuses is skipped, not fatal.
 
+DirectXMod is an optional, soft dependency: `fabric.mod.json` declares it under
+`recommends`, so installing it is never required and never blocks the game from
+launching.
+
+## In-game menu
+
+**F9** (rebindable under Controls → Polyglass) opens the picker:
+
+```
+Polyglass — graphics backend
+This session: OpenGL 4.6
+Order: vulkan → dx12 → opengl → software
+
+▶ Auto — follow order
+   Vulkan (vanilla)
+   Direct3D 12 (DirectXMod) — not installed
+   OpenGL (vanilla)
+   Software (CPU raster) — off
+
+[Software: OFF] [Get DirectXMod] [CPU raster test]
+Restart the game to apply.
+[Reset]                              [Done]
+```
+
+- The first line reports the device the game actually created, which is the only
+  reliable answer to "did my choice take effect?".
+- `Get DirectXMod` opens the upstream repository behind a confirmation screen.
+- `CPU raster test` renders a 320×240 scene with the CPU rasteriser and writes
+  `config/polyglass-selftest.png`. It needs no GPU and no driver.
+
 ### No live switching
 
 The candidate list is consumed once, before the GLFW window exists, and the
@@ -44,15 +74,21 @@ toggle.
 
 ### Software backend status
 
-The CPU core (`dev.polyglass.backend.software.SoftRaster`) works: colour buffer,
-depth buffer, clipped filled triangles, and headless tests. The `GpuDevice`
-binding does not exist yet, so `SoftBackend.createDevice` throws
+The CPU core works: ARGB colour buffer, float depth buffer, clipped filled
+triangles, and 12 headless tests. `SoftFrameDump` renders a complete 320×240
+scene — sky gradient, ground, three depth-tested triangles, one clipped against
+the frame edge — and the picker can write it to a PNG. No GPU, no driver, no
+Minecraft classes.
+
+What does **not** exist is the `GpuDevice` binding: textures, buffers, samplers,
+render passes and pipeline compilation all have to be implemented before the
+frontend will accept a device. So `SoftBackend.createDevice` throws
 `BackendCreationException` on purpose. That keeps the entry safe to enable: the
 boot loop treats it as "unavailable" and falls through to Vulkan/OpenGL instead
 of booting into a half-bound device.
 
-It is off by default (`enableSoftware`). Turn it on to see the fallback in the
-log, not to get frames.
+It is off by default (`enableSoftware`). Turn it on to have the fallback in the
+candidate list, not to get game frames.
 
 ### About VulkanMod and MetalRender
 
@@ -82,8 +118,8 @@ Selection: explicit `backend` first (if usable), then `order`, then anything
 still available. Unknown or unavailable ids are dropped silently; `debug: true`
 logs the resolved plan.
 
-In game, **F9** opens the picker. It is also reachable from the key bindings
-menu.
+In game, **F9** opens the picker (see [In-game menu](#in-game-menu)). It is
+also rebindable under Controls → Polyglass.
 
 ## Building
 
@@ -109,6 +145,7 @@ src/main/java/dev/polyglass/
   backend/BackendCatalog.java     builds the GpuBackend[] from config
   backend/software/SoftBackend.java   CPU backend (device binding pending)
   backend/software/SoftRaster.java    framebuffer + triangle rasteriser
+  backend/software/SoftFrameDump.java complete offscreen scene -> PNG
   config/PolyglassConfig.java     polyglass.json
   menu/PolyglassScreen.java       backend picker
   mixin/PreferredGraphicsApiMixin.java   the entire integration

@@ -33,10 +33,10 @@ public final class PolyglassConfig {
     /** Preference order for {@code auto}. Null means "use the platform default". */
     private List<String> order;
 
-    /** Opt in to the CPU rasteriser once it can actually produce a frame. */
+    /** Opt in to the CPU rasteriser. It is a raster core, not a display driver. */
     private boolean enableSoftware = false;
 
-    /** Extra logging of the resolved plan. */
+    /** Extra logging of the resolved plan and the running backend. */
     private boolean debug = false;
 
     private PolyglassConfig() {
@@ -79,6 +79,11 @@ public final class PolyglassConfig {
         return backend == null || backend.isBlank() ? BackendPlan.AUTO : backend;
     }
 
+    /**
+     * The configured preference order, normalised and de-duplicated. Unknown ids
+     * are kept: a backend may become available later after a mod is installed,
+     * and dropping it here would silently forget the user's preference.
+     */
     public List<String> order() {
         if (order == null || order.isEmpty()) {
             return defaultOrder();
@@ -111,6 +116,19 @@ public final class PolyglassConfig {
         save();
     }
 
+    public void setDebug(boolean enabled) {
+        this.debug = enabled;
+        save();
+    }
+
+    /** Back to the shipped defaults, keeping the debug flag. */
+    public void reset() {
+        this.backend = BackendPlan.AUTO;
+        this.order = null;
+        this.enableSoftware = false;
+        save();
+    }
+
     public void save() {
         Path file = path();
         try {
@@ -128,7 +146,7 @@ public final class PolyglassConfig {
      * only when DirectXMod is installed, but listing it costs nothing: an
      * unavailable id is dropped before the list reaches the game.
      */
-    private static List<String> defaultOrder() {
+    public static List<String> defaultOrder() {
         if (Probe.isWindows()) {
             return List.of("vulkan", "dx12", "opengl", "software");
         }

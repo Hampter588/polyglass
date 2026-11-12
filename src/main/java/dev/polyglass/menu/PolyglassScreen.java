@@ -1,13 +1,17 @@
 package dev.polyglass.menu;
 
 import dev.polyglass.Probe;
+import dev.polyglass.backend.BackendCatalog;
 import dev.polyglass.backend.BackendPlan;
+import dev.polyglass.backend.software.SoftFrameDump;
 import dev.polyglass.config.PolyglassConfig;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.StringWidget;
+import net.minecraft.client.gui.screens.ConfirmLinkScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -22,7 +26,16 @@ import java.util.List;
  */
 public final class PolyglassScreen extends Screen {
 
-    private static final int WIDGET_WIDTH = 240;
+    private static final String DX12_URL = "https://github.com/366862732/DirectXmod";
+    private static final int ROW_WIDTH = 280;
+    private static final int ROW_HEIGHT = 20;
+    private static final int ROW_PITCH = 22;
+
+    /** Screen-local message under the buttons; survives {@link #rebuild()}. */
+    private String statusLine = "";
+
+    /** Set as soon as the config differs from what this session booted with. */
+    private boolean dirty;
 
     public PolyglassScreen() {
         super(Component.literal("Polyglass"));
@@ -31,43 +44,59 @@ public final class PolyglassScreen extends Screen {
     @Override
     protected void init() {
         super.init();
-        int centre = this.width / 2;
-        int y = 48;
 
-        StringWidget title = new StringWidget(Component.literal("Polyglass - graphics backend"), this.font);
-        title.setPosition(centre - WIDGET_WIDTH / 2, 24);
-        addRenderableWidget(title);
+        int top = Math.max(8, (this.height - 216) / 2);
+        int left = this.width / 2 - ROW_WIDTH / 2;
 
-        addRenderableWidget(Button.builder(label(), button -> {
-            cycle();
-            rebuild();
-        }).bounds(centre - WIDGET_WIDTH / 2, y, WIDGET_WIDTH, 20).build());
-        y += 26;
+        addLine("Polyglass — graphics backend", left, top);
+        addLine("This session: " + BackendCatalog.runningBackend(), left, top + 14);
+        addLine("Order: " + String.join(" → ", PolyglassConfig.get().order()), left, top + 26);
 
+        int y = top + 44;
+        for (Choice choice : choices()) {
+            addRenderableWidget(Button.builder(Component.literal(choice.label()), button -> select(choice.id()))
+                    .bounds(left, y, ROW_WIDTH, ROW_HEIGHT)
+                    .build());
+            y += ROW_PITCH;
+        }
+
+        int small = 88;
+        int gap = 8;
+        int rowY = y + 4;
         addRenderableWidget(Button.builder(softwareLabel(), button -> {
             PolyglassConfig config = PolyglassConfig.get();
             config.setSoftwareEnabled(!config.softwareEnabled());
+            dirty = true;
             rebuild();
-        }).bounds(centre - WIDGET_WIDTH / 2, y, WIDGET_WIDTH, 20).build());
-        y += 26;
+        }).bounds(left, rowY, small, ROW_HEIGHT).build());
 
-        Button order = Button.builder(
-                        Component.literal("Order: " + String.join(" > ", PolyglassConfig.get().order())),
-                        button -> {
-                        })
-                .bounds(centre - WIDGET_WIDTH / 2, y, WIDGET_WIDTH, 20)
-                .build();
-        order.active = false; // read-only: edit polyglass.json to reorder
-        addRenderableWidget(order);
-        y += 26;
+        addRenderableWidget(Button.builder(dx12Label(),
+                        ConfirmLinkScreen.confirmLink(this, DX12_URL))
+                .bounds(left + small + gap, rowY, small, ROW_HEIGHT)
+                .build());
 
-        StringWidget note = new StringWidget(restartNote(), this.font);
-        note.setPosition(centre - WIDGET_WIDTH / 2, y);
-        addRenderableWidget(note);
-        y += 22;
+        addRenderableWidget(Button.builder(Component.literal("CPU raster test"), button -> selfTest())
+                .bounds(left + (small + gap) * 2, rowY, small, ROW_HEIGHT)
+                .build());
+
+        addLine(noteText(), left, rowY + 26);
+
+        int bottom = rowY + 40;
+        addRenderableWidget(Button.builder(Component.literal("Reset"), button -> {
+            PolyglassConfig.get().reset();
+            dirty = true;
+            statusLine = "Reset to defaults.";
+            rebuild();
+        }).bounds(left, bottom, 100, ROW_HEIGHT).build());
 
         addRenderableWidget(Button.builder(Component.literal("Done"), button -> this.onClose())
-                .bounds(centre - 50, y, 100, 20).build());
+                .bounds(left + ROW_WIDTH - 100, bottom, 100, ROW_HEIGHT).build());
+    }
+
+    private void addLine(String text, int x, int y) {
+        StringWidget widget = new StringWidget(Component.literal(text), this.font);
+        widget.setPosition(x, y);
+        addRenderableWidget(widget);
     }
 
     private void rebuild() {
@@ -75,47 +104,70 @@ public final class PolyglassScreen extends Screen {
         this.init();
     }
 
-    private void cycle() {
-        List<String> ids = candidates();
-        String current = BackendPlan.normalize(PolyglassConfig.get().backend());
-        int index = ids.indexOf(current);
-        String next = ids.get((index + 1) % ids.size());
-        PolyglassConfig.get().setBackend(next);
+    /** A backend row: what it is, whether it can exist here, and whether it is chosen. */
+    private record Choice(String id, String label) {
     }
 
-    private Component label() {
-        String current = PolyglassConfig.get().backend();
-        return Component.literal("Backend: " + displayName(current));
+    private List<Choice> choices() {
+        PolyglassConfig config = PolyglassConfig.get();
+        String selected = BackendPlan.normalize(config.backend());
+        List<Choice> choices = new ArrayList<>(5);
+
+        choices.add(new Choice(BackendPlan.AUTO,
+                marker(selected, BackendPlan.AUTO) + "Auto — follow order"));
+        choices.add(new Choice(BackendCatalog.VULKAN,
+                marker(selected, BackendCatalog.VULKAN) + "Vulkan (vanilla)"));
+        choices.add(new Choice(BackendCatalog.DX12,
+                marker(selected, BackendCatalog.DX12)
+                        + "Direct3D 12 (DirectXMod)"
+                        + (BackendCatalog.directXModInstalled() && Probe.isWindows()
+                        ? "" : " — " + (Probe.isWindows() ? "not installed" : "Windows only"))));
+        choices.add(new Choice(BackendCatalog.OPENGL,
+                marker(selected, BackendCatalog.OPENGL) + "OpenGL (vanilla)"));
+        choices.add(new Choice(BackendCatalog.SOFTWARE,
+                marker(selected, BackendCatalog.SOFTWARE)
+                        + "Software (CPU raster)"
+                        + (config.softwareEnabled() ? " — experimental" : " — off")));
+        return choices;
+    }
+
+    private static String marker(String selected, String id) {
+        return selected.equals(id) ? "▶ " : "   ";
+    }
+
+    private void select(String id) {
+        PolyglassConfig config = PolyglassConfig.get();
+        if (id.equals(BackendPlan.normalize(config.backend()))) {
+            return;
+        }
+        config.setBackend(id);
+        dirty = true;
+        rebuild();
     }
 
     private Component softwareLabel() {
-        return Component.literal("Software fallback: " + (PolyglassConfig.get().softwareEnabled() ? "ON" : "OFF"));
+        return Component.literal("Software: " + (PolyglassConfig.get().softwareEnabled() ? "ON" : "OFF"));
     }
 
-    private Component restartNote() {
-        return Component.literal("Restart the game to apply.");
+    private Component dx12Label() {
+        return Component.literal(BackendCatalog.directXModInstalled() ? "DirectXMod: installed" : "Get DirectXMod");
     }
 
-    private static List<String> candidates() {
-        List<String> ids = new ArrayList<>();
-        ids.add(BackendPlan.AUTO);
-        ids.add("vulkan");
-        if (Probe.isWindows() && Probe.hasClass("com.xgdt.dx12.dx12.Dx12Backend")) {
-            ids.add("dx12");
+    private String noteText() {
+        if (!statusLine.isEmpty()) {
+            return statusLine;
         }
-        ids.add("opengl");
-        ids.add("software");
-        return ids;
+        return dirty ? "Restart the game to apply." : "Changes apply on the next launch.";
     }
 
-    private static String displayName(String id) {
-        return switch (BackendPlan.normalize(id)) {
-            case BackendPlan.AUTO -> "Auto (" + String.join(" → ", PolyglassConfig.get().order()) + ")";
-            case "vulkan" -> "Vulkan (vanilla)";
-            case "opengl" -> "OpenGL (vanilla)";
-            case "dx12" -> "Direct3D 12 (DirectXMod)";
-            case "software" -> "Software (CPU, experimental)";
-            default -> id;
-        };
+    private void selfTest() {
+        Path dir = PolyglassConfig.path().getParent();
+        try {
+            Path out = SoftFrameDump.write(dir, 320, 240);
+            statusLine = "Wrote " + out.getFileName();
+        } catch (Exception e) {
+            statusLine = "Raster test failed: " + e.getMessage();
+        }
+        rebuild();
     }
 }
