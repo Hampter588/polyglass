@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "polyglass",
+  "version": "${version}",
+  "name": "Polyglass",
+  "description": "Pluggable graphics backends for Minecraft: Vulkan, Direct3D 12, Metal and OpenGL, plus an optional mesh-shader chunk path.",
+  "authors": [],
+  "license": "MIT",
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      "dev.polyglass.Polyglass"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=0.19.5",
+    "minecraft": "~26.3",
+    "java": ">=25"
+  }
+}
